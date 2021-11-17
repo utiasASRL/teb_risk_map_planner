@@ -10,7 +10,7 @@
 #include <boost/make_shared.hpp>
 
 #include <nav_msgs/OccupancyGrid.h>
-#include <teb_local_planner/VoxGrid.h> // For the Predicted Costmap 3D
+#include <vox_msgs/VoxGrid.h> // For the Predicted Costmap 3D
 #include <teb_local_planner/pose_se2.h>
 #include <teb_local_planner/g2o_types/vertex_pose.h>
 
@@ -159,7 +159,7 @@ public:
     * @brief Initializes the PredictedCostmap3D class with the values in the ROS message
     * @param voxel_grid OccupancyGrid ros message
     */
-  void initialize(const teb_local_planner::VoxGrid voxel_grid);
+  void initialize(const vox_msgs::VoxGrid voxel_grid);
 
   /**
     * @brief Interpolate the costmap values at \c pos

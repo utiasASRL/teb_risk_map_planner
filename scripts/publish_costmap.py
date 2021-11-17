@@ -11,7 +11,7 @@ import numpy as np
 from costmap_converter.msg import ObstacleArrayMsg, ObstacleMsg
 from geometry_msgs.msg import PolygonStamped, Point32, QuaternionStamped, Quaternion, TwistWithCovariance
 from tf.transformations import quaternion_from_euler
-from teb_local_planner.msg import VoxGrid
+from vox_msgs.msg import VoxGrid
 from nav_msgs.msg import OccupancyGrid, MapMetaData
 from ros_numpy import point_cloud2 as pc2
 from sensor_msgs.msg import PointCloud2

@@ -120,7 +120,7 @@ PredictedCostmap3D::~PredictedCostmap3D()
 {
 }
 
-void PredictedCostmap3D::initialize(const teb_local_planner::VoxGrid voxel_grid)
+void PredictedCostmap3D::initialize(const vox_msgs::VoxGrid voxel_grid)
 {
   // get information from ros message
   stamped_time_ = voxel_grid.header.stamp.toSec();

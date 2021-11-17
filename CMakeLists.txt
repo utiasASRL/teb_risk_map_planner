@@ -26,6 +26,7 @@ find_package(catkin REQUIRED COMPONENTS
   tf2_geometry_msgs
   tf2_ros
   visualization_msgs
+  vox_msgs
 )
 message(STATUS "System: ${CMAKE_SYSTEM}")
 ## System dependencies are found with CMake's conventions
@@ -106,7 +107,6 @@ add_message_files(
   TrajectoryPointMsg.msg
   TrajectoryMsg.msg
   FeedbackMsg.msg
-  VoxGrid.msg
 )
 
 ## Generate services in the 'srv' folder
@@ -165,6 +165,7 @@ catkin_package(
         tf2
         tf2_ros
 	visualization_msgs
+  vox_msgs
   DEPENDS SUITESPARSE G2O
 )
 

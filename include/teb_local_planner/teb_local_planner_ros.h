@@ -60,7 +60,7 @@
 #include <nav_msgs/Path.h>
 #include <nav_msgs/Odometry.h>
 #include <nav_msgs/OccupancyGrid.h> // for the 2D PredictedCostmap
-#include <teb_local_planner/VoxGrid.h> // for the 3D PredictedCostmap
+#include <vox_msgs/VoxGrid.h> // for the 3D PredictedCostmap
 #include <geometry_msgs/PoseStamped.h>
 #include <visualization_msgs/MarkerArray.h>
 #include <visualization_msgs/Marker.h>
@@ -398,7 +398,7 @@ protected:
  */
   void PredictedCostmapCB(const nav_msgs::OccupancyGrid occupancy_grid);
 
-  void PredictedCostmap3DCB(const teb_local_planner::VoxGrid voxel_grid);
+  void PredictedCostmap3DCB(const vox_msgs::VoxGrid voxel_grid);
   
 private:
   // Definition of member variables

@@ -218,7 +218,7 @@ void TebLocalPlannerROS::PredictedCostmapCB(const nav_msgs::OccupancyGrid occupa
   planner_->updatePredictedCostmap(predictions_);
 }
 
-void TebLocalPlannerROS::PredictedCostmap3DCB(const teb_local_planner::VoxGrid voxel_grid)
+void TebLocalPlannerROS::PredictedCostmap3DCB(const vox_msgs::VoxGrid voxel_grid)
 {
   PredictedCostmap3D tmp; 
   tmp.initialize(voxel_grid);
