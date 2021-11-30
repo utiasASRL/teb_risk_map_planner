@@ -29,11 +29,10 @@ def feedback_callback(data):
     trajectory = data.trajectories[data.selected_trajectory_idx].trajectory
 
 
-
 def load_saved_costmaps(file_path):
 
     with open(file_path, 'rb') as f:
-        collider_data = pickle.load(f)
+        collider_data = pickle.load(f, encoding='latin1')
 
     return collider_data
 
@@ -183,9 +182,9 @@ def publish_costmap_msg(traj_debug=False):
 
 
     # Load costmaps to publish
-    simu_path = '/home/hth/Myhal_Simulation/simulated_runs'
-    folder = '2021-06-07-21-44-58'
-    pred_file = os.path.join(simu_path, folder, 'logs-' + folder, 'collider_data.pickle')
+    simu_path = '/home/deepanshu/Downloads'
+    # folder = '2021-06-07-21-44-58'
+    pred_file = os.path.join(simu_path, 'collider_data.pickle')
     collider_data = load_saved_costmaps(pred_file)
 
     dl = collider_data['dl'][0]
@@ -194,7 +193,7 @@ def publish_costmap_msg(traj_debug=False):
     pred_times = collider_data['header_stamp']
 
     # Init
-    collision_pub = rospy.Publisher('/test_optim_node/plan_costmap_3D', VoxGrid, queue_size=1)
+    collision_pub = rospy.Publisher('/plan_costmap_3D', VoxGrid, queue_size=1)
     visu_pub = rospy.Publisher('/collision_visu', OccupancyGrid, queue_size=1)
     pointcloud_pub = rospy.Publisher('/colli_points', PointCloud2, queue_size=10)
     #pub = rospy.Publisher('/p3dx/move_base/TebLocalPlannerROS/obstacles', ObstacleArrayMsg, queue_size=1)
@@ -234,13 +233,13 @@ def publish_costmap_msg(traj_debug=False):
         
         # Get messages
         collision_msg = get_collisions_msg(preds, t0, new_origin, dl, dt)
-        #visu_msg = get_collisions_visu_msg(preds, t0, new_origin, dl, visu_T)
+        visu_msg = get_collisions_visu_msg(preds, t0, new_origin, dl, visu_T)
         points, labels = get_pred_points(preds, t0, new_origin, dl, dt)
         pt_msg = get_pointcloud_msg(points, labels)
 
         # Publish
         collision_pub.publish(collision_msg)
-        #visu_pub.publish(visu_msg)
+        visu_pub.publish(visu_msg)
         pointcloud_pub.publish(pt_msg)
 
         ###################
@@ -258,9 +257,6 @@ def publish_costmap_msg(traj_debug=False):
                 omegas.append(point.velocity.angular.z)
                 
             plot_velocity_profile(fig, ax_v, ax_omega, np.asarray(ts), np.asarray(vs), np.asarray(omegas))
-
-
-
 
         t = t + 0.05
         r.sleep()

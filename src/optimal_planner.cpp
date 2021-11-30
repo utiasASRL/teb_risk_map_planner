@@ -68,11 +68,14 @@ TebOptimalPlanner::TebOptimalPlanner() : cfg_(NULL), obstacles_(NULL), via_point
   
 TebOptimalPlanner::TebOptimalPlanner(const TebConfig& cfg, ObstContainer* obstacles, RobotFootprintModelPtr robot_model, TebVisualizationPtr visual, const ViaPointContainer* via_points, PredictedCostmapPtr predictions, PredictedCostmap3DPtr predictions3D)
 {    
+
+  // ROS_ERROR("DEBUG 5");
   initialize(cfg, obstacles, robot_model, visual, via_points, predictions, predictions3D);
 }
 
 TebOptimalPlanner::~TebOptimalPlanner()
 {
+  // ROS_ERROR("DEBUG 6");
   clearGraph();
   // free dynamically allocated memory
   //if (optimizer_) 
@@ -99,6 +102,9 @@ void TebOptimalPlanner::updatePredictedCostmap3D(PredictedCostmap3DPtr predictio
 
 void TebOptimalPlanner::initialize(const TebConfig& cfg, ObstContainer* obstacles, RobotFootprintModelPtr robot_model, TebVisualizationPtr visual, const ViaPointContainer* via_points, PredictedCostmapPtr predictions, PredictedCostmap3DPtr predictions3D)
 {    
+
+  // ROS_ERROR("DEBUG 7");
+
   // init optimizer (set solver and block ordering settings)
   optimizer_ = initOptimizer();
   
@@ -128,13 +134,20 @@ void TebOptimalPlanner::initialize(const TebConfig& cfg, ObstContainer* obstacle
 void TebOptimalPlanner::setVisualization(TebVisualizationPtr visualization)
 {
   visualization_ = visualization;
+  // ROS_ERROR("DEBUG 8");
+
 }
 
 void TebOptimalPlanner::visualize()
 {
+
+  // ROS_ERROR(" Debug 4");
+
   if (!visualization_)
     return;
- 
+
+  // ROS_ERROR(" Debug 3");
+
   visualization_->publishLocalPlanAndPoses(teb_);
   
   if (teb_.sizePoses() > 0)
@@ -319,10 +332,12 @@ bool TebOptimalPlanner::plan(const PoseSE2& start, const PoseSE2& goal, const ge
   if (!teb_.isInit())
   {
     // init trajectory
+    ROS_ERROR("CHECK 1");
     teb_.initTrajectoryToGoal(start, goal, 0, cfg_->robot.max_vel_x, cfg_->trajectory.min_samples, cfg_->trajectory.allow_init_with_backwards_motion); // 0 intermediate samples, but dt=1 -> autoResize will add more samples before calling first optimization
   }
   else // warm start
   {
+    ROS_ERROR("CHECK 2");
     if (teb_.sizePoses() > 0
         && (goal.position() - teb_.BackPose().position()).norm() < cfg_->trajectory.force_reinit_new_goal_dist
         && fabs(g2o::normalize_theta(goal.theta() - teb_.BackPose().theta())) < cfg_->trajectory.force_reinit_new_goal_angular) // actual warm start!
@@ -1062,7 +1077,8 @@ void TebOptimalPlanner::AddEdgesPredictedCostmap()
   Eigen::Matrix<double,1,1> information;
   information.fill(1);
 
-  // TODO: Find more optimal way. I am checking 2 times the interpolation here: to enter the function, and inside the function. Probabliy compute here the interpolated value and jacobi, and send it directly to the edge for g2o format compliance.
+  // TODO: Find more optimal way. I am checking 2 times the interpolation here: to enter the function, and inside the function. 
+  // Probabliy compute here the interpolated value and jacobi, and send it directly to the edge for g2o format compliance.
   for(int index = 1; index < teb_.sizePoses() - 1; ++index)
   {
     double interpolation = 0;  
@@ -1100,7 +1116,8 @@ void TebOptimalPlanner::AddEdgesPredictedCostmap3D()
   //information(1,1) = cfg_->optim.weight_dynamic_obstacle_inflation;
   //information(0,1) = information(1,0) = 0;
 
-  // Check timestamp of robot current pose. Identify this timestamp with a costmap layer, associate each teb state to closest layer in time or interpolate?
+  // Check timestamp of robot current pose. Identify this timestamp with a costmap layer, 
+  // associate each teb state to closest layer in time or interpolate?
   double curr_time = ros::Time::now().toSec();
   double prediction_init_time = predictions3D_->getInitialTime();
 

@@ -19,7 +19,6 @@ def feedback_callback(data):
     return
   trajectory = data.trajectories[data.selected_trajectory_idx].trajectory
   
-  
 def plot_velocity_profile(fig, ax_v, ax_omega, t, v, omega):
   ax_v.cla()
   ax_v.grid()
@@ -32,8 +31,6 @@ def plot_velocity_profile(fig, ax_v, ax_omega, t, v, omega):
   ax_omega.plot(t, omega, '-bx')
   fig.canvas.draw()
 
-  
-  
 def velocity_plotter():
   global trajectory
   rospy.init_node("visualize_velocity_profile", anonymous=True)
@@ -50,7 +47,6 @@ def velocity_plotter():
   plotter.ion()
   plotter.show()
   
-
   r = rospy.Rate(2) # define rate here
   while not rospy.is_shutdown():
     
@@ -73,4 +69,3 @@ if __name__ == '__main__':
     velocity_plotter()
   except rospy.ROSInterruptException:
     pass
-

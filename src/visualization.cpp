@@ -68,6 +68,8 @@ void TebVisualization::initialize(ros::NodeHandle& nh, const TebConfig& cfg)
   feedback_pub_ = nh.advertise<teb_local_planner::FeedbackMsg>("teb_feedback", 10);  
   
   initialized_ = true; 
+
+  ROS_ERROR("DEBUG 9");
 }
 
 
@@ -87,8 +89,12 @@ void TebVisualization::publishLocalPlan(const std::vector<geometry_msgs::PoseSta
 
 void TebVisualization::publishLocalPlanAndPoses(const TimedElasticBand& teb) const
 {
+  // ROS_ERROR(" Debug 2");
+
   if ( printErrorWhenNotInitialized() )
     return;
+
+    // ROS_ERROR(" Debug 1");
   
     // create path msg
     nav_msgs::Path teb_path;

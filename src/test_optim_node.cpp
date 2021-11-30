@@ -171,9 +171,12 @@ int main( int argc, char** argv )
 // Planning loop
 void CB_mainCycle(const ros::TimerEvent& e)
 {
+
+  // ROS_INFO_THROTTLE(10, "CB main");
+
 	std::vector<clock_t> t;
   t.push_back(std::clock());
-  planner->plan(PoseSE2(0,0,0), PoseSE2(3.5,0,0)); // hardcoded start and goal for testing purposes
+  planner->plan(PoseSE2(0,0,0), PoseSE2(4,2,0)); // hardcoded start and goal for testing purposes
 	t.push_back(std::clock());
 
   double duration = 1000 * (t[1] - t[0]) / (double)CLOCKS_PER_SEC;
@@ -185,6 +188,8 @@ void CB_mainCycle(const ros::TimerEvent& e)
 // Visualization loop
 void CB_publishCycle(const ros::TimerEvent& e)
 {
+  // ROS_INFO_THROTTLE(10, "CB PUBLISH ### Visual");
+
   planner->visualize();
   visual->publishObstacles(obst_vector);
   visual->publishViaPoints(via_points);
@@ -263,6 +268,7 @@ void CB_obstacle_marker(const visualization_msgs::InteractiveMarkerFeedbackConst
 
 void CB_customObstacle(const costmap_converter::ObstacleArrayMsg::ConstPtr& obst_msg)
 {
+  // ROS_ERROR( "Custom obstacle");
   // resize such that the vector contains only the fixed obstacles specified inside the main function
   obst_vector.resize(no_fixed_obstacles);
   
@@ -308,7 +314,7 @@ void CB_customObstacle(const costmap_converter::ObstacleArrayMsg::ConstPtr& obst
 void CB_PredictedCostmap3D(const vox_msgs::VoxGrid& pred_msg)
 {
 
-  ROS_INFO("Debug");
+  // ROS_WARN_THROTTLE(10, "Predictions 3D");
 
   PredictedCostmap3D tmp; 
   tmp.initialize(pred_msg);
