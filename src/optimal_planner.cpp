@@ -93,6 +93,7 @@ void TebOptimalPlanner::updatePredictedCostmap(PredictedCostmapPtr predictions)
 
 void TebOptimalPlanner::updatePredictedCostmap3D(PredictedCostmap3DPtr predictions3D)
 {
+  // ROS_WARN_STREAM("updatePredictedCostmap3D ###");
   predictions3D_ = predictions3D;
 }
 
@@ -1087,6 +1088,7 @@ void TebOptimalPlanner::AddEdgesPredictedCostmap()
 void TebOptimalPlanner::AddEdgesPredictedCostmap3D()
 {
 
+  ROS_INFO_THROTTLE(30, "Added edge for predicted costmap[3D]");
   // Init variable
   Eigen::Matrix<double,1,1> information;
   information.fill(cfg_->optim.weight_predicted_costmap);

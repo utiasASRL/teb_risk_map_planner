@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 # Author: franz.albers@tu-dortmund.de
 
@@ -183,9 +183,11 @@ def publish_costmap_msg(traj_debug=False):
 
 
     # Load costmaps to publish
-    simu_path = '/home/hth/Myhal_Simulation/simulated_runs'
-    folder = '2021-06-07-21-44-58'
-    pred_file = os.path.join(simu_path, folder, 'logs-' + folder, 'collider_data.pickle')
+    # simu_path = '/home/hth/Myhal_Simulation/simulated_runs'
+    simu_path = '/home/administrator/1-Deep-Collider/simulated_runs'
+    #folder = '2021-06-07-21-44-58'
+    #pred_file = os.path.join(simu_path, folder, 'logs-' + folder, 'collider_data.pickle')
+    pred_file = os.path.join(simu_path, 'collider_data.pickle')
     collider_data = load_saved_costmaps(pred_file)
 
     dl = collider_data['dl'][0]
@@ -265,11 +267,10 @@ def publish_costmap_msg(traj_debug=False):
         t = t + 0.05
         r.sleep()
 
-
 if __name__ == '__main__':
     global trajectory
     try:
         trajectory = []
         publish_costmap_msg(traj_debug=False)
     except rospy.ROSInterruptException:
-        passs
+        pass

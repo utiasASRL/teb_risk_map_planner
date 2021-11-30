@@ -91,9 +91,13 @@ void TebLocalPlannerROS::reconfigureCB(TebLocalPlannerReconfigureConfig& config,
 
 void TebLocalPlannerROS::initialize(std::string name, tf2_ros::Buffer* tf, costmap_2d::Costmap2DROS* costmap_ros)
 {
+    ROS_WARN("Debug 1 ##############################");
+
   // check if the plugin is already initialized
   if(!initialized_)
   {	
+    ROS_WARN("Debug 4 ##############################");
+
     name_ = name;
     // create Node Handle with name of plugin (as used in move_base for loading)
     ros::NodeHandle nh("~/" + name);
@@ -119,12 +123,12 @@ void TebLocalPlannerROS::initialize(std::string name, tf2_ros::Buffer* tf, costm
     if (cfg_.hcp.enable_homotopy_class_planning)
     {
       planner_ = PlannerInterfacePtr(new HomotopyClassPlanner(cfg_, &obstacles_, robot_model, visualization_, &via_points_, predictions_, predictions3D_));
-      ROS_INFO("Parallel planning in distinctive topologies enabled.");
+      ROS_WARN("Parallel planning in distinctive topologies enabled.");
     }
     else
     {
       planner_ = PlannerInterfacePtr(new TebOptimalPlanner(cfg_, &obstacles_, robot_model, visualization_, &via_points_, predictions_, predictions3D_));
-      ROS_INFO("Parallel planning in distinctive topologies disabled.");
+      ROS_WARN("Parallel planning in distinctive topologies disabled.");
     }
     
     // init other variables
@@ -210,7 +214,10 @@ void TebLocalPlannerROS::initialize(std::string name, tf2_ros::Buffer* tf, costm
 }
 
 void TebLocalPlannerROS::PredictedCostmapCB(const nav_msgs::OccupancyGrid occupancy_grid)
-{
+{ 
+
+  ROS_WARN("Debug 2 ##############################");
+
   PredictedCostmap tmp; 
   tmp.initialize(occupancy_grid);
   predictions_ = boost::make_shared<PredictedCostmap>(tmp);
@@ -220,6 +227,8 @@ void TebLocalPlannerROS::PredictedCostmapCB(const nav_msgs::OccupancyGrid occupa
 
 void TebLocalPlannerROS::PredictedCostmap3DCB(const vox_msgs::VoxGrid voxel_grid)
 {
+  ROS_WARN_THROTTLE(30, "VoxMsg working!");
+
   PredictedCostmap3D tmp; 
   tmp.initialize(voxel_grid);
   predictions3D_ = boost::make_shared<PredictedCostmap3D>(tmp);
@@ -265,6 +274,8 @@ uint32_t TebLocalPlannerROS::computeVelocityCommands(const geometry_msgs::PoseSt
                                                      geometry_msgs::TwistStamped &cmd_vel,
                                                      std::string &message)
 { 
+
+  ROS_WARN_THROTTLE(20, "__ computeVelocityCommands func __");
   // check if plugin initialized 
   if(!initialized_)
   {
@@ -1044,6 +1055,8 @@ void TebLocalPlannerROS::configureBackupModes(std::vector<geometry_msgs::PoseSta
      
 void TebLocalPlannerROS::customObstacleCB(const costmap_converter::ObstacleArrayMsg::ConstPtr& obst_msg)
 {
+  ROS_WARN_THROTTLE(30, "Custom Obstacle Callback Working!");
+
   boost::mutex::scoped_lock l(custom_obst_mutex_);
   custom_obstacle_msg_ = *obst_msg;  
 }

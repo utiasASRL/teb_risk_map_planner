@@ -133,7 +133,7 @@ int main( int argc, char** argv )
   obst_vector.emplace_back(polyobst);
   */
   
-  for (unsigned int i=0; i<obst_vector.size(); ++i)
+  for (unsigned int i = 0; i < obst_vector.size(); ++i)
   {
     // setup callbacks for setting obstacle velocities
     std::string topic = "/test_optim_node/obstacle_" + std::to_string(i) + "/cmd_vel";
@@ -147,6 +147,7 @@ int main( int argc, char** argv )
       CreateInteractiveMarker(pobst->x(),pobst->y(),i, config.map_frame, &marker_server, &CB_obstacle_marker);  
     }
   }
+  
   marker_server.applyChanges();
   
   // Setup visualization
@@ -173,7 +174,8 @@ void CB_mainCycle(const ros::TimerEvent& e)
 {
 	std::vector<clock_t> t;
   t.push_back(std::clock());
-  planner->plan(PoseSE2(0,0,0), PoseSE2(3.5,0,0)); // hardcoded start and goal for testing purposes
+
+  planner->plan(PoseSE2(0,0,0), PoseSE2(-1.4, 2.3 ,0)); // hardcoded start and goal for testing purposes
 	t.push_back(std::clock());
 
   double duration = 1000 * (t[1] - t[0]) / (double)CLOCKS_PER_SEC;
