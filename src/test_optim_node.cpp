@@ -175,7 +175,7 @@ void CB_mainCycle(const ros::TimerEvent& e)
 	std::vector<clock_t> t;
   t.push_back(std::clock());
 
-  planner->plan(PoseSE2(0,0,0), PoseSE2(-1.4, 2.3 ,0)); // hardcoded start and goal for testing purposes
+  planner->plan(PoseSE2(0,0,0), PoseSE2(3.5, 0 ,0)); // hardcoded start and goal for testing purposes
 	t.push_back(std::clock());
 
   double duration = 1000 * (t[1] - t[0]) / (double)CLOCKS_PER_SEC;

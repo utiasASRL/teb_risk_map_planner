@@ -196,7 +196,7 @@ def publish_costmap_msg(traj_debug=False):
     pred_times = collider_data['header_stamp']
 
     # Init
-    collision_pub = rospy.Publisher('/test_optim_node/plan_costmap_3D', VoxGrid, queue_size=1)
+    collision_pub = rospy.Publisher('/plan_costmap_3D', VoxGrid, queue_size=1)
     visu_pub = rospy.Publisher('/collision_visu', OccupancyGrid, queue_size=1)
     pointcloud_pub = rospy.Publisher('/colli_points', PointCloud2, queue_size=10)
     #pub = rospy.Publisher('/p3dx/move_base/TebLocalPlannerROS/obstacles', ObstacleArrayMsg, queue_size=1)
@@ -236,13 +236,13 @@ def publish_costmap_msg(traj_debug=False):
         
         # Get messages
         collision_msg = get_collisions_msg(preds, t0, new_origin, dl, dt)
-        #visu_msg = get_collisions_visu_msg(preds, t0, new_origin, dl, visu_T)
+        visu_msg = get_collisions_visu_msg(preds, t0, new_origin, dl, visu_T)
         points, labels = get_pred_points(preds, t0, new_origin, dl, dt)
         pt_msg = get_pointcloud_msg(points, labels)
 
         # Publish
         collision_pub.publish(collision_msg)
-        #visu_pub.publish(visu_msg)
+        visu_pub.publish(visu_msg)
         pointcloud_pub.publish(pt_msg)
 
         ###################
