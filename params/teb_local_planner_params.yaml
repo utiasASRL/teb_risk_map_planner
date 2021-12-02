@@ -1,4 +1,4 @@
-test_optim_node:
+TebLocalPlannerROS:
 
  odom_topic: /odometry/filtered
  map_frame:  odom
@@ -29,7 +29,7 @@ test_optim_node:
  min_turning_radius: 0.0
  footprint_model: # types: "point", "circular", "two_circles", "line", "polygon"
    type: "circular"
-   radius: 0.45 # for type "circular"
+   radius: 0.55 # for type "circular"
    line_start: [-0.3, 0.0] # for type "line"
    line_end: [0.3, 0.0] # for type "line"
    front_offset: 0.2 # for type "two_circles"
@@ -89,7 +89,7 @@ test_optim_node:
  weight_dynamic_obstacle: 0             # Default: 50
  weight_dynamic_obstacle_inflation: 0   # Default: 0.1
 
- weight_predicted_costmap: 0.7   # Default: 0.6 direct multiplier of the error function for predicted costmaps
+ weight_predicted_costmap: 0.9   # Default: 0.6 direct multiplier of the error function for predicted costmaps
 
  # Homotopy Class Planner
 

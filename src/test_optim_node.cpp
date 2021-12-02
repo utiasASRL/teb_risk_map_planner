@@ -44,6 +44,11 @@
 #include <boost/shared_ptr.hpp>
 #include <boost/make_shared.hpp>
 
+// check
+// enable homotopy
+// obstacles topic name from fast_collider.py
+// dt_ref
+
 
 using namespace teb_local_planner; // it is ok here to import everything for testing purposes
 
@@ -99,6 +104,7 @@ int main( int argc, char** argv )
   
   // setup callback for predicted 
   custom_pred3D_sub = n.subscribe("/plan_costmap_3D", 1, CB_PredictedCostmap3D);
+  // ROS_ERROR(" CHECK 1");
   
   // setup callback for clicked points (in rviz) that are considered as via-points
   clicked_points_sub = n.subscribe("/clicked_point", 5, CB_clicked_points);
@@ -157,10 +163,14 @@ int main( int argc, char** argv )
   RobotFootprintModelPtr robot_model = TebLocalPlannerROS::getRobotFootprintFromParamServer(n);
   
   // Setup planner (homotopy class planning or just the local teb planner)
-  if (config.hcp.enable_homotopy_class_planning)
-    planner = PlannerInterfacePtr(new HomotopyClassPlanner(config, &obst_vector, robot_model, visual, &via_points));
-  else
-    planner = PlannerInterfacePtr(new TebOptimalPlanner(config, &obst_vector, robot_model, visual, &via_points));
+  if (config.hcp.enable_homotopy_class_planning){
+      planner = PlannerInterfacePtr(new HomotopyClassPlanner(config, &obst_vector, robot_model, visual, &via_points));
+      ROS_WARN(" Enable homotopy class");
+  }
+  else{
+      planner = PlannerInterfacePtr(new TebOptimalPlanner(config, &obst_vector, robot_model, visual, &via_points));
+      ROS_WARN(" Disable homotopy class");
+  }
   
 
   no_fixed_obstacles = obst_vector.size();
@@ -175,7 +185,7 @@ void CB_mainCycle(const ros::TimerEvent& e)
 	std::vector<clock_t> t;
   t.push_back(std::clock());
 
-  planner->plan(PoseSE2(0,0,0), PoseSE2(3.5, 0 ,0)); // hardcoded start and goal for testing purposes
+  planner->plan(PoseSE2(0,0,0), PoseSE2(-1, 2.0 ,0)); // hardcoded start and goal for testing purposes
 	t.push_back(std::clock());
 
   double duration = 1000 * (t[1] - t[0]) / (double)CLOCKS_PER_SEC;
@@ -266,6 +276,9 @@ void CB_obstacle_marker(const visualization_msgs::InteractiveMarkerFeedbackConst
 void CB_customObstacle(const costmap_converter::ObstacleArrayMsg::ConstPtr& obst_msg)
 {
   // resize such that the vector contains only the fixed obstacles specified inside the main function
+
+  ROS_WARN_THROTTLE(30, "Obstacle callback");
+
   obst_vector.resize(no_fixed_obstacles);
   
   // Add custom obstacles obtained via message (assume that all obstacles coordiantes are specified in the default planning frame)  
@@ -310,7 +323,7 @@ void CB_customObstacle(const costmap_converter::ObstacleArrayMsg::ConstPtr& obst
 void CB_PredictedCostmap3D(const vox_msgs::VoxGrid& pred_msg)
 {
 
-  ROS_INFO("Debug");
+  ROS_WARN_THROTTLE(30, "VoxMsg");
 
   PredictedCostmap3D tmp; 
   tmp.initialize(pred_msg);

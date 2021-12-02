@@ -71,10 +71,12 @@ public:
     _error[0] = interpolation * cfg_->optim.weight_predicted_costmap;
 
     
-    // if (layer_ > 10 && layer_ < 13)
+    // if (layer_ > 0)
     // { 
-    //   std::cout << "      L=" << layer_ << ", w=" << cfg_->optim.weight_predicted_costmap << ", v=" << _error[0]  << std::endl;
+    // std::cout << "      L=" << layer_ << ", w=" << cfg_->optim.weight_predicted_costmap << ", v=" << _error[0]  << std::endl;
     // }
+
+    // ROS_WARN_STREAM("      L=" << layer_ << ", w=" << cfg_->optim.weight_predicted_costmap << ", v=" << _error[0] );
 
 
     // // *************************************** Debug interpolation  ***************************************

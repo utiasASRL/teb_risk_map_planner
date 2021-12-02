@@ -316,6 +316,9 @@ bool TebOptimalPlanner::plan(const tf::Pose& start, const tf::Pose& goal, const 
 
 bool TebOptimalPlanner::plan(const PoseSE2& start, const PoseSE2& goal, const geometry_msgs::Twist* start_vel, bool free_goal_vel)
 {	
+
+  // ROS_INFO("Plan called");
+
   ROS_ASSERT_MSG(initialized_, "Call initialize() first.");
   if (!teb_.isInit())
   {
@@ -348,6 +351,7 @@ bool TebOptimalPlanner::plan(const PoseSE2& start, const PoseSE2& goal, const ge
 
 bool TebOptimalPlanner::buildGraph(double weight_multiplier)
 {
+  // ROS_WARN("Build graph called");
   if (!optimizer_->edges().empty() || !optimizer_->vertices().empty())
   {
     ROS_WARN("Cannot build graph, because it is not empty. Call graphClear()!");
@@ -371,9 +375,10 @@ bool TebOptimalPlanner::buildGraph(double weight_multiplier)
   // add edge for predicted costmap, if one is initialized
   if(predictions_->isInitialized())
     AddEdgesPredictedCostmap();
-    
-  if(predictions3D_->isInitialized())
+  
+  if(predictions3D_->isInitialized()){
     AddEdgesPredictedCostmap3D();
+  }
 
   AddEdgesViaPoints();
   
@@ -434,6 +439,7 @@ bool TebOptimalPlanner::optimizeGraph(int no_iterations,bool clear_after)
   // HERE
   // DEBUG
   //optimizer_->edges
+
 
 
 
@@ -1088,7 +1094,7 @@ void TebOptimalPlanner::AddEdgesPredictedCostmap()
 void TebOptimalPlanner::AddEdgesPredictedCostmap3D()
 {
 
-  ROS_INFO_THROTTLE(30, "Added edge for predicted costmap[3D]");
+  ROS_WARN_THROTTLE(10, "Added edge for predicted costmap[3D]");
   // Init variable
   Eigen::Matrix<double,1,1> information;
   information.fill(cfg_->optim.weight_predicted_costmap);
@@ -1120,8 +1126,8 @@ void TebOptimalPlanner::AddEdgesPredictedCostmap3D()
     double continuous_layer = (pt_time -  prediction_init_time) / predictions3D_->getTemporalResolution();
 
     // // TODO: Handle attenuation -----------------------------------------
-
-    // // Get corresponding layer index in the costmap
+    
+        // // Get corresponding layer index in the costmap
     // int current_prediction_layer = (int)std::round(continuous_layer);
 
     // // Get a attenuation factor for the teb poses out of the predictions 
@@ -1139,6 +1145,11 @@ void TebOptimalPlanner::AddEdgesPredictedCostmap3D()
     //   std::cout << "diff = " << (pt_time -  prediction_init_time) << std::endl;
     //   std::cout << "current_prediction_layer = " << current_prediction_layer << std::endl;
     // }
+
+    if(continuous_layer > predictions3D_-> getDepth() - 1){
+      continuous_layer = predictions3D_-> getDepth() - 1;
+      ROS_INFO_THROTTLE(30, "The plan poses that are too far into the future are optimized using the last layer of VoxGrid: ## Msg is throttled ##");
+    }
 
     if(0 < continuous_layer && continuous_layer < (double)predictions3D_->getDepth())
     {
