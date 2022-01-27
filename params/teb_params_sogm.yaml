@@ -14,7 +14,7 @@ TebLocalPlannerROS:
  feasibility_check_no_poses: 2
  exact_arc_length: False
 
- visualize_with_time_as_z_axis_scale: 0.1
+#  visualize_with_time_as_z_axis_scale: 0.1
 
  include_dynamic_obstacles: True    # Default False
 
@@ -78,12 +78,12 @@ TebLocalPlannerROS:
  weight_optimaltime: 1
  weight_shortest_path: 0
 
- weight_obstacle: 0                 # Default: 50
- weight_inflation: 0                # Default: 0.1
- weight_dynamic_obstacle: 0             # Default: 50
- weight_dynamic_obstacle_inflation: 0   # Default: 0.1
+ weight_obstacle: 0.001                 # Default: 50
+ weight_inflation: 0.001                # Default: 0.1
+ weight_dynamic_obstacle: 0.001             # Default: 50
+ weight_dynamic_obstacle_inflation: 0.001  # Default: 0.1
 
- weight_predicted_costmap: 0.9   # Default: 0.6 direct multiplier of the error function for predicted costmaps
+ weight_predicted_costmap: 250.0   # Default: 0.6 direct multiplier of the error function for predicted costmaps
 
  # Homotopy Class Planner
 

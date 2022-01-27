@@ -101,6 +101,8 @@ void TebLocalPlannerROS::initialize(std::string name, tf2_ros::Buffer* tf, costm
     name_ = name;
     // create Node Handle with name of plugin (as used in move_base for loading)
     ros::NodeHandle nh("~/" + name);
+
+    ROS_WARN_STREAM(name);
 	        
     // get parameters of TebConfig via the nodehandle and override the default config
     cfg_.loadRosParamFromNodeHandle(nh);       
@@ -189,6 +191,8 @@ void TebLocalPlannerROS::initialize(std::string name, tf2_ros::Buffer* tf, costm
     // setup callback for custom via-points 
     via_points_sub_ = nh.subscribe("via_points", 1, &TebLocalPlannerROS::customViaPointsCB, this);
     
+    ROS_WARN("Debug 3 ##############################");
+    
     simulated_occupancy_grid_sub = nh.subscribe("/plan_costmap_2D", 1, &TebLocalPlannerROS::PredictedCostmapCB, this);
 
     simulated_occupancy_grid_3D_sub = nh.subscribe("/plan_costmap_3D", 1, &TebLocalPlannerROS::PredictedCostmap3DCB, this);
@@ -216,7 +220,6 @@ void TebLocalPlannerROS::initialize(std::string name, tf2_ros::Buffer* tf, costm
 void TebLocalPlannerROS::PredictedCostmapCB(const nav_msgs::OccupancyGrid occupancy_grid)
 { 
 
-  ROS_WARN("Debug 2 ##############################");
 
   PredictedCostmap tmp; 
   tmp.initialize(occupancy_grid);
@@ -227,6 +230,7 @@ void TebLocalPlannerROS::PredictedCostmapCB(const nav_msgs::OccupancyGrid occupa
 
 void TebLocalPlannerROS::PredictedCostmap3DCB(const vox_msgs::VoxGrid voxel_grid)
 {
+  ROS_WARN("Debug 2 ##############################");
   ROS_WARN_THROTTLE(30, "VoxMsg working!");
 
   PredictedCostmap3D tmp; 
