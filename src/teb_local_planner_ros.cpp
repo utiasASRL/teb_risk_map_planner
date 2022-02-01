@@ -197,6 +197,9 @@ void TebLocalPlannerROS::initialize(std::string name, tf2_ros::Buffer* tf, costm
 
     simulated_occupancy_grid_3D_sub = nh.subscribe("/plan_costmap_3D", 1, &TebLocalPlannerROS::PredictedCostmap3DCB, this);
 
+    
+    ROS_WARN("Debug 3 ## Subscribed to /plan_costmap_3D");
+
     // initialize failure detector
     ros::NodeHandle nh_move_base("~");
     double controller_frequency = 5;
@@ -230,7 +233,6 @@ void TebLocalPlannerROS::PredictedCostmapCB(const nav_msgs::OccupancyGrid occupa
 
 void TebLocalPlannerROS::PredictedCostmap3DCB(const vox_msgs::VoxGrid voxel_grid)
 {
-  ROS_WARN("Debug 2 ##############################");
   ROS_WARN_THROTTLE(30, "VoxMsg working!");
 
   PredictedCostmap3D tmp; 
