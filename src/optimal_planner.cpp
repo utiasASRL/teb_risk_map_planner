@@ -1146,10 +1146,12 @@ void TebOptimalPlanner::AddEdgesPredictedCostmap3D()
     //   std::cout << "current_prediction_layer = " << current_prediction_layer << std::endl;
     // }
 
-    if(continuous_layer > predictions3D_-> getDepth() - 1){
-      continuous_layer = predictions3D_-> getDepth() - 1;
-      // ROS_INFO_THROTTLE(30, "The plan poses that are too far into the future are optimized using the last layer of VoxGrid: ## Msg is throttled ##");
-    }
+
+    // // The plan poses that are too far into the future are optimized using the last layer of VoxGrid
+    // if(continuous_layer > predictions3D_-> getDepth() - 1){
+    //   continuous_layer = predictions3D_-> getDepth() - 1;
+    //   // ROS_INFO_THROTTLE(30, "The plan poses that are too far into the future are optimized using the last layer of VoxGrid: ## Msg is throttled ##");
+    // }
 
     if(0 < continuous_layer && continuous_layer < (double)predictions3D_->getDepth())
     {
