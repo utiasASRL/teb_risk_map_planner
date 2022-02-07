@@ -124,6 +124,7 @@ public:
     bool include_dynamic_obstacles; //!< Specify whether the movement of dynamic obstacles should be predicted by a constant velocity model (this also effects homotopy class planning); If false, all obstacles are considered to be static.
     bool include_costmap_obstacles; //!< Specify whether the obstacles in the costmap should be taken into account directly
     double costmap_obstacles_behind_robot_dist; //!< Limit the occupied local costmap obstacles taken into account for planning behind the robot (specify distance in meters)
+    int costmap_obstacles_stride; //!< Limit the occupied local costmap obstacles to a fraction of the costmap cells (specify integer stride value)
     int obstacle_poses_affected; //!< The obstacle position is attached to the closest pose on the trajectory to reduce computational effort, but take a number of neighbors into account as well
     bool legacy_obstacle_association; //!< If true, the old association strategy is used (for each obstacle, find the nearest TEB pose), otherwise the new one (for each teb pose, find only "relevant" obstacles).
     double obstacle_association_force_inclusion_factor; //!< The non-legacy obstacle association technique tries to connect only relevant obstacles with the discretized trajectory during optimization, all obstacles within a specifed distance are forced to be included (as a multiple of min_obstacle_dist), e.g. choose 2.0 in order to consider obstacles within a radius of 2.0*min_obstacle_dist.
@@ -292,6 +293,7 @@ public:
     obstacles.include_dynamic_obstacles = true;
     obstacles.include_costmap_obstacles = true;
     obstacles.costmap_obstacles_behind_robot_dist = 1.5;
+    obstacles.costmap_obstacles_stride = 1;
     obstacles.obstacle_poses_affected = 25;
     obstacles.legacy_obstacle_association = false;
     obstacles.obstacle_association_force_inclusion_factor = 1.5;

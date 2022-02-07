@@ -6,6 +6,7 @@ dictitems:
   allow_init_with_backwards_motion: false
   cmd_angle_instead_rotvel: false
   costmap_obstacles_behind_robot_dist: 1.5
+  costmap_obstacles_stride: 1
   divergence_detection_enable: false
   divergence_detection_max_chi_squared: 10.0
   dt_hysteresis: 0.05
@@ -71,6 +72,7 @@ dictitems:
           Obstacles: !!python/object/new:dynamic_reconfigure.encoding.Config
             dictitems:
               costmap_obstacles_behind_robot_dist: 1.5
+              costmap_obstacles_stride: 1
               dynamic_obstacle_inflation_dist: 0.9
               groups: !!python/object/new:dynamic_reconfigure.encoding.Config
                 dictitems:

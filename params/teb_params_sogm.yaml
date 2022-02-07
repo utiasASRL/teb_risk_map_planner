@@ -51,7 +51,8 @@ TebLocalPlannerROS:
  inflation_dist: 0.6
  dynamic_obstacle_inflation_dist: 0.9
  include_costmap_obstacles: False
- costmap_obstacles_behind_robot_dist: 1.0
+ costmap_obstacles_behind_robot_dist: 6.0
+ costmap_obstacles_stride: 2
  obstacle_poses_affected: 30
 
 #  # Costmap converter
@@ -79,12 +80,12 @@ TebLocalPlannerROS:
  weight_shortest_path: 0
  weight_viapoint: 1
 
- weight_obstacle: 0.1                       # Default: 50
- weight_inflation: 0.001                    # Default: 0.1
- weight_dynamic_obstacle: 0.1               # Default: 50
- weight_dynamic_obstacle_inflation: 0.001   # Default: 0.1
+ weight_obstacle: 100                       # Default: 50
+ weight_inflation: 0.2                    # Default: 0.1
+ weight_dynamic_obstacle: 10               # Default: 50
+ weight_dynamic_obstacle_inflation: 0.2   # Default: 0.1
 
- weight_predicted_costmap: 1.4   # Default: 0.6 direct multiplier of the error function for predicted costmaps
+ weight_predicted_costmap: 0.01   # Default: 0.6 direct multiplier of the error function for predicted costmaps
 
  # Homotopy Class Planner
 
