@@ -67,8 +67,11 @@ public:
     // std::cout << "--------------------------------------------------------" << std::endl; 
     // // *************************************** Debug Numeric Gradient ***************************************
 
-    // minus (-) here?????? Why?
-    _error[0] = interpolation * cfg_->optim.weight_predicted_costmap;
+    // Error in case of static or dynamic obstacles
+    if (layer_ < 0.5)
+      _error[0] = interpolation * cfg_->optim.weight_static_costmap;
+    else
+      _error[0] = interpolation * cfg_->optim.weight_predicted_costmap;
 
     
     // if (layer_ > 0)

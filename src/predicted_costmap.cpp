@@ -236,9 +236,9 @@ void PredictedCostmap3D::interpolateCostmapValue(VertexPose pos, double *interpo
   // int layer0 = layer1 - 1;
 
   // For now we use closest interpolation
-  int closest_layer = (int)std::round(layer) - 1;
+  int closest_layer = (int)std::round(layer);
 
-  if (closest_layer < 1 || closest_layer > depth_ - 1)
+  if (closest_layer < 0 || closest_layer > depth_ - 1)
   {
     *interpolation = 0;
     return;

@@ -21,15 +21,15 @@ TebLocalPlannerROS:
  control_look_ahead_poses: 2 # Set this to at least t0 2, to get a better estimation of the /cmd_vel
     
  # Robot       
- max_vel_x: 0.6               # Actual Jackal value in controller: 2.0 m/s
- max_vel_x_backwards: 0.3
- max_vel_theta: 0.5           # Actual Jackal value in controller: 4.0 rad/s
- acc_lim_x: 0.4               # Actual Jackal value in controller: 20.0 m/s^2
- acc_lim_theta: 0.4          # Actual Jackal value in controller: 25.0 rad/s^2
+ max_vel_x: 0.8               # Actual Jackal value in controller: 2.0 m/s
+ max_vel_x_backwards: 0.5
+ max_vel_theta: 0.7           # Actual Jackal value in controller: 4.0 rad/s
+ acc_lim_x: 0.7               # Actual Jackal value in controller: 20.0 m/s^2
+ acc_lim_theta: 0.8          # Actual Jackal value in controller: 25.0 rad/s^2
  min_turning_radius: 1.0
  footprint_model: # types: "point", "circular", "two_circles", "line", "polygon"
    type: "circular"
-   radius: 0.3 # for type "circular"
+   radius: 0.35 # for type "circular"
 
 #  # Legacy obstacle association strategy
 #  legacy_obstacle_association : False  # Default False
@@ -80,12 +80,13 @@ TebLocalPlannerROS:
  weight_shortest_path: 0
  weight_viapoint: 1
 
- weight_obstacle: 100                       # Default: 50
- weight_inflation: 0.2                    # Default: 0.1
- weight_dynamic_obstacle: 10               # Default: 50
- weight_dynamic_obstacle_inflation: 0.2   # Default: 0.1
+ weight_obstacle: 0.001                       # Default: 50
+ weight_inflation: 0.001                    # Default: 0.1
+ weight_dynamic_obstacle: 0.001               # Default: 50
+ weight_dynamic_obstacle_inflation: 0.001   # Default: 0.1
 
- weight_predicted_costmap: 0.01   # Default: 0.6 direct multiplier of the error function for predicted costmaps
+ weight_predicted_costmap: 2.6   # Default: 0.6 direct multiplier of the error function for predicted costmaps
+ weight_static_costmap: 1.6   # Default: 0.6 direct multiplier of the error function for predicted costmaps
 
  # Homotopy Class Planner
 

@@ -1095,18 +1095,17 @@ void TebOptimalPlanner::AddEdgesPredictedCostmap3D()
 {
 
   ROS_WARN_THROTTLE(10, "Added edge for predicted costmap[3D]");
-  // Init variable
-  Eigen::Matrix<double,1,1> information;
-  information.fill(cfg_->optim.weight_predicted_costmap);
+  
+  // Init information matrix (measure how sure we are of a constraint applied to the optimization)
+  // Obstacle use their weight as info, but their weight is a lot higher (50 or 100)
+  Eigen::Matrix<double,1,1> information_dynamic;
+  information_dynamic.fill(cfg_->optim.weight_predicted_costmap * 10.0);
+  Eigen::Matrix<double,1,1> information_static;
+  information_static.fill(cfg_->optim.weight_static_costmap * 10.0);
 
-  // Stride varaible (only one edge per N band pose)
+  // Stride variable (only one edge per N band pose)
   int edge_0 = 2;
   int edge_stride = 1;
-  
-  //Eigen::Matrix<double,2,2> information;
-  //information(0,0) = cfg_->optim.weight_dynamic_obstacle * weight_multiplier;
-  //information(1,1) = cfg_->optim.weight_dynamic_obstacle_inflation;
-  //information(0,1) = information(1,0) = 0;
 
   // Check timestamp of robot current pose. Identify this timestamp with a costmap layer, associate each teb state to closest layer in time or interpolate?
   double curr_time = ros::Time::now().toSec();
@@ -1119,33 +1118,23 @@ void TebOptimalPlanner::AddEdgesPredictedCostmap3D()
   for(int index = edge_0; index < teb_.sizePoses() - 1; ++index += edge_stride)
   {
 
+    // 1. Add an edge for static obstacles
+    // ***********************************
+    EdgePredictedCostmap3D* edge_static = new EdgePredictedCostmap3D;
+    edge_static->setVertex(0, teb_.PoseVertex(index));
+    edge_static->setInformation(information_static);
+    edge_static->setParameters(*cfg_, robot_model_.get(), predictions3D_.get(), 0.1);
+    optimizer_->addEdge(edge_static);
+
+
+    // 2. Add an edge for dynamic obstacles
+    // ************************************
+
     // Get timestamp for this  point of TEB plan
     double pt_time = curr_time + teb_.TimeDiffSumToIndex(index);
 
     // Get the layer value (continuous value for interpolation)
     double continuous_layer = (pt_time -  prediction_init_time) / predictions3D_->getTemporalResolution();
-
-    // // TODO: Handle attenuation -----------------------------------------
-    
-        // // Get corresponding layer index in the costmap
-    // int current_prediction_layer = (int)std::round(continuous_layer);
-
-    // // Get a attenuation factor for the teb poses out of the predictions 
-    // double attenuation = 1.0;
-    // if(current_prediction_layer >= predictions3D_->getDepth())
-    // {
-    //   attenuation = (double)std::pow(0.5, current_prediction_layer - predictions3D_->getDepth());
-    //   current_prediction_layer = predictions3D_->getDepth();
-    // }
-
-    // // TODO: Handle attenuation -----------------------------------------
-    
-    // if (index == teb_.sizePoses() - 2)
-    // {
-    //   std::cout << "diff = " << (pt_time -  prediction_init_time) << std::endl;
-    //   std::cout << "current_prediction_layer = " << current_prediction_layer << std::endl;
-    // }
-
 
     // // The plan poses that are too far into the future are optimized using the last layer of VoxGrid
     // if(continuous_layer > predictions3D_-> getDepth() - 1){
@@ -1153,11 +1142,11 @@ void TebOptimalPlanner::AddEdgesPredictedCostmap3D()
     //   // ROS_INFO_THROTTLE(30, "The plan poses that are too far into the future are optimized using the last layer of VoxGrid: ## Msg is throttled ##");
     // }
 
-    if(0 < continuous_layer && continuous_layer < (double)predictions3D_->getDepth())
+    if(0.9 < continuous_layer && continuous_layer < (double)predictions3D_->getDepth())
     {
       EdgePredictedCostmap3D* edge = new EdgePredictedCostmap3D;
       edge->setVertex(0, teb_.PoseVertex(index));
-      edge->setInformation(information);
+      edge->setInformation(information_dynamic);
       edge->setParameters(*cfg_, robot_model_.get(), predictions3D_.get(), continuous_layer);
       optimizer_->addEdge(edge);
     }

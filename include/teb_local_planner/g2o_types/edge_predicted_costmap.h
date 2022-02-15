@@ -40,7 +40,7 @@ public:
     double interpolation = 0.0; 
     
     _measurement->interpolateCostmapValue(bandpt->pose(), &interpolation);
-    _error[0] = interpolation * cfg_->optim.weight_predicted_costmap; 
+    _error[0] = interpolation * cfg_->optim.weight_static_costmap; 
     
     // UNCOMMENT TO SEND ERROR TO TXT FOR PLOTTING
     // std::ofstream myfile;
@@ -53,7 +53,7 @@ public:
 
 
 // #ifdef USE_ANALYTIC_JACOBI
-#if 1
+#if 0
   /**
    * @brief Jacobi matrix of the cost function specified in computeError().
    */
@@ -63,8 +63,8 @@ public:
     int dx = 0, dy = 0;  
     _measurement->computeDerivativePos(bandpt->pose(), &dx, &dy);
 
-    _jacobianOplusXi(0, 0) = - dx * cfg_->optim.weight_predicted_costmap; 
-    _jacobianOplusXi(0, 1) = - dy * cfg_->optim.weight_predicted_costmap;
+    _jacobianOplusXi(0, 0) = - dx * cfg_->optim.weight_static_costmap; 
+    _jacobianOplusXi(0, 1) = - dy * cfg_->optim.weight_static_costmap;
 
     // std::ofstream myfile;
     // myfile.open("/home/mgsa/devfile/edgePredictedCostmap_jacobian.txt", std::ios_base::app);

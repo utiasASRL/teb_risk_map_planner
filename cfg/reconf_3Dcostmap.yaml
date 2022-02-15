@@ -141,6 +141,7 @@ dictitems:
               weight_obstacle: 50.0
               weight_optimaltime: 1.0
               weight_predicted_costmap: 0.6
+              weight_static_costmap: 0.6
               weight_shortest_path: 0.0
               weight_velocity_obstacle_ratio: 0.0
               weight_viapoint: 1.0
@@ -336,6 +337,7 @@ dictitems:
   weight_obstacle: 50.0
   weight_optimaltime: 1.0
   weight_predicted_costmap: 0.6
+  weight_static_costmap: 0.6
   weight_shortest_path: 0.0
   weight_velocity_obstacle_ratio: 0.0
   weight_viapoint: 1.0
