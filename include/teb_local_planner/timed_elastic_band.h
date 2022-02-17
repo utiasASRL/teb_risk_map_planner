@@ -657,6 +657,9 @@ public:
   
   
   //@}
+
+  //Debug container doring the layer of the predicted costmap each pose is assigned to
+  std::vector<double> pose_layer;
 	
 protected:
   PoseSequence pose_vec_; //!< Internal container storing the sequence of optimzable pose vertices

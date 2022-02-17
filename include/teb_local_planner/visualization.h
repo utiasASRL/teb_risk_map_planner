@@ -66,6 +66,7 @@
 #include <nav_msgs/Odometry.h>
 #include <nav_msgs/Path.h>
 #include <visualization_msgs/Marker.h>
+#include <visualization_msgs/MarkerArray.h>
 
 namespace teb_local_planner
 {
@@ -253,6 +254,7 @@ protected:
   ros::Publisher global_plan_pub_; //!< Publisher for the global plan
   ros::Publisher local_plan_pub_; //!< Publisher for the local plan
   ros::Publisher teb_poses_pub_; //!< Publisher for the trajectory pose sequence
+  ros::Publisher vis_custom_pub_; //!< Publisher for the trajectory pose sequence colored via their layer in the 3D costmap
   ros::Publisher teb_marker_pub_; //!< Publisher for visualization markers
   ros::Publisher feedback_pub_; //!< Publisher for the feedback message for analysis and debug purposes
   

@@ -1099,9 +1099,9 @@ void TebOptimalPlanner::AddEdgesPredictedCostmap3D()
   // Init information matrix (measure how sure we are of a constraint applied to the optimization)
   // Obstacle use their weight as info, but their weight is a lot higher (50 or 100)
   Eigen::Matrix<double,1,1> information_dynamic;
-  information_dynamic.fill(cfg_->optim.weight_predicted_costmap * 10.0);
+  information_dynamic.fill(cfg_->optim.weight_predicted_costmap * 2.0);
   Eigen::Matrix<double,1,1> information_static;
-  information_static.fill(cfg_->optim.weight_static_costmap * 10.0);
+  information_static.fill(cfg_->optim.weight_static_costmap * 4.0);
 
   // Stride variable (only one edge per N band pose)
   int edge_0 = 2;
@@ -1115,7 +1115,9 @@ void TebOptimalPlanner::AddEdgesPredictedCostmap3D()
     prediction_init_time = curr_time;
 
   // start iterating at second point on teb, the first being the robot pose
-  for(int index = edge_0; index < teb_.sizePoses() - 1; ++index += edge_stride)
+  
+  teb_.pose_layer = std::vector<double>(teb_.sizePoses(), -1.0);
+  for(int index = edge_0; index < teb_.sizePoses() - 1; index += edge_stride)
   {
 
     // 1. Add an edge for static obstacles
@@ -1149,7 +1151,18 @@ void TebOptimalPlanner::AddEdgesPredictedCostmap3D()
       edge->setInformation(information_dynamic);
       edge->setParameters(*cfg_, robot_model_.get(), predictions3D_.get(), continuous_layer);
       optimizer_->addEdge(edge);
+      
+      // ROS_WARN_STREAM("         ------- edge " << index << " => " << continuous_layer);
+      teb_.pose_layer[index] = continuous_layer / (double)predictions3D_->getDepth();
+
     }
+    else
+    {
+      // ROS_WARN_STREAM("         ------- edge " << index << " => " << continuous_layer << "  ignored");
+      teb_.pose_layer[index] = 2.0;
+    }
+        
+
 
   }
 

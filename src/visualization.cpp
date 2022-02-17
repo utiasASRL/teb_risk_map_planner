@@ -64,6 +64,7 @@ void TebVisualization::initialize(ros::NodeHandle& nh, const TebConfig& cfg)
   global_plan_pub_ = nh.advertise<nav_msgs::Path>("global_plan", 1);
   local_plan_pub_ = nh.advertise<nav_msgs::Path>("local_plan",1);
   teb_poses_pub_ = nh.advertise<geometry_msgs::PoseArray>("teb_poses", 100);
+  vis_custom_pub_ = nh.advertise<visualization_msgs::MarkerArray>("teb_pose_layer", 100);
   teb_marker_pub_ = nh.advertise<visualization_msgs::Marker>("teb_markers", 1000);
   feedback_pub_ = nh.advertise<teb_local_planner::FeedbackMsg>("teb_feedback", 10);  
   
@@ -99,6 +100,107 @@ void TebVisualization::publishLocalPlanAndPoses(const TimedElasticBand& teb) con
     geometry_msgs::PoseArray teb_poses;
     teb_poses.header.frame_id = teb_path.header.frame_id;
     teb_poses.header.stamp = teb_path.header.stamp;
+
+    // Custom visualization: message of the poses colored via their association to the costmap
+    visualization_msgs::MarkerArray marker_array;
+    if (teb.pose_layer.size() > 0)
+    {
+      for (int i=0; i < teb.sizePoses(); i++)
+      {
+        // Create arrow marker
+        visualization_msgs::Marker marker;
+        marker.header.frame_id = cfg_->map_frame;
+        marker.header.stamp = teb_path.header.stamp;
+        marker.ns = "teb_custom";
+        marker.id = i;
+        marker.type = visualization_msgs::Marker::ARROW;
+        marker.action = visualization_msgs::Marker::ADD;
+
+        // Set pose amd orientation
+        marker.pose.position.x = teb.Pose(i).x();
+        marker.pose.position.y = teb.Pose(i).y();
+        marker.pose.position.z = cfg_->hcp.visualize_with_time_as_z_axis_scale*teb.getSumOfTimeDiffsUpToIdx(i);
+        marker.pose.orientation = tf::createQuaternionMsgFromYaw(teb.Pose(i).theta());
+
+        // Set length/width/height
+        marker.scale.x = 0.6* cfg_->trajectory.dt_ref;
+        marker.scale.y = 0.2 * cfg_->trajectory.dt_ref;
+        marker.scale.z = 0.05 * cfg_->trajectory.dt_ref;
+
+        // Set color
+        if (teb.pose_layer[i] < -0.5)
+        {
+          marker.color.a = 0.2;
+          marker.color.r = 0.8;
+          marker.color.g = 0.8;
+          marker.color.b = 0.8;
+        }
+        else if (teb.pose_layer[i] > 1.5)
+        {
+          marker.color.a = 0.7;
+          marker.color.r = 0.0;
+          marker.color.g = 0.0;
+          marker.color.b = 0.0;
+
+        }
+        else
+        {
+          double beta = std::min(std::max(teb.pose_layer[i], 0.0), 1.0);
+          marker.color.a = 1.0;
+          marker.color.r = 1.0;
+          marker.color.g = beta;
+          marker.color.b = 0.0;
+
+        }
+        marker_array.markers.push_back(marker);
+      }
+
+      // Add text with SOGM delay
+      for (int i=0; i < teb.sizePoses(); i++)
+      {
+        if (teb.pose_layer[i] > -0.5 && teb.pose_layer[i] < 1.5)
+        {
+          // Create arrow marker
+          visualization_msgs::Marker marker;
+          marker.header.frame_id = cfg_->map_frame;
+          marker.header.stamp = teb_path.header.stamp;
+          marker.ns = "teb_custom";
+          double dT = 0.2;
+          double loop_T = 2.0;
+          marker.id = 100 + (int)(std::floor(std::fmod(teb_path.header.stamp.toSec(), loop_T) / dT));
+          marker.type = visualization_msgs::Marker::TEXT_VIEW_FACING;
+          marker.action = visualization_msgs::Marker::ADD;
+
+          // Set data
+          int precisionVal = 2;
+          double delay = teb.pose_layer[i] * 3.0;
+          marker.text = std::to_string(delay).substr(0, std::to_string(delay).find(".") + precisionVal + 1);
+          double beta = std::min(std::max((delay - 0.3) / (1.2 - 0.3), 0.0), 1.0);
+          marker.color.a = 0.8;
+          marker.color.r = beta;
+          marker.color.g = 1.0 - beta / 2;
+          marker.color.b = 0.0;
+
+          // Set pose amd orientation
+          marker.pose.position.x = teb.Pose(0).x();
+          marker.pose.position.y = teb.Pose(0).y();
+          marker.pose.position.z = 0.2 * delay + 0.3;
+          marker.pose.orientation = tf::createQuaternionMsgFromYaw(teb.Pose(i).theta());
+
+          // Set length/width/height
+          marker.scale.z = 0.6 * cfg_->trajectory.dt_ref;
+
+          marker_array.markers.push_back(marker);
+
+          break;
+        }
+      }
+
+      
+
+
+      vis_custom_pub_.publish(marker_array);
+    }
     
     // fill path msgs with teb configurations
     for (int i=0; i < teb.sizePoses(); i++)
