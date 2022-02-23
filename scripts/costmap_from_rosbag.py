@@ -6,6 +6,7 @@ import tf
 import pickle
 import os
 import rosbag
+import tf2_ros
 import numpy as np
 from costmap_converter.msg import ObstacleArrayMsg, ObstacleMsg
 from geometry_msgs.msg import PolygonStamped, Point32, QuaternionStamped, Quaternion, TwistWithCovariance, PoseStamped, TransformStamped
@@ -17,6 +18,7 @@ from teb_local_planner.msg import FeedbackMsg, TrajectoryMsg, TrajectoryPointMsg
 import tf2_geometry_msgs
 
 import matplotlib.pyplot as plt
+from matplotlib.widgets import Slider, Button, RadioButtons
 
 
 def feedback_callback(data):
@@ -242,174 +244,6 @@ def read_tf_transform(parent_frame, child_frame, bagfile, static=False):
 
     return arr
 
-def transforms_to_trajectory(transforms):
-    ''' converts a list of time stamped transforms to a list of pose stamped messages, where the pose is that of the child frame relative to it's parent'''
-    traj = []
-    for transform in transforms:
-        geo_msg = PoseStamped()
-        geo_msg.header = transform.header
-        geo_msg.header.frame_id = transform.child_frame_id
-        geo_msg.pose.position = transform.transform.translation
-        geo_msg.pose.orientation = transform.transform.rotation
-        traj.append(geo_msg)
-
-    return traj
-
-def interpolate_pose(time, pose1, pose2):
-    ''' given a target time, and two PoseStamped messages, find the interpolated pose between pose1 and pose2 ''' 
-
-    t1 = pose1.header.stamp.to_sec()
-    t2 = pose2.header.stamp.to_sec()
-
-    alpha = 0
-    if (t1 != t2):
-        alpha = (time-t1)/(t2-t1)
-
-    pos1 = pose1.pose.position
-    pos2 = pose2.pose.position
-
-    rot1 = pose1.pose.orientation
-    rot1 = [rot1.x,rot1.y,rot1.z,rot1.w]
-    rot2 = pose2.pose.orientation
-    rot2 = [rot2.x,rot2.y,rot2.z,rot2.w]
-
-    res = PoseStamped()
-
-    res.header.stamp = rospy.Time(time)
-    res.header.frame_id = pose1.header.frame_id
-
-    res.pose.position.x = pos1.x + (pos2.x - pos1.x)*alpha
-    res.pose.position.y = pos1.y + (pos2.y - pos1.y)*alpha
-    res.pose.position.z = pos1.z + (pos2.z - pos1.z)*alpha
-
-    res_rot = tf.transformations.quaternion_slerp(rot1,rot2,alpha)
-    res.pose.orientation.x = res_rot[0]
-    res.pose.orientation.y = res_rot[1]
-    res.pose.orientation.z = res_rot[2]
-    res.pose.orientation.w = res_rot[3]
-
-    return res
-
-def interpolate_transform(time, trans1, trans2):
-    ''' given a target time, and two TransformStamped messages, find the interpolated transform ''' 
-
-    t1 = trans1.header.stamp.to_sec()
-    t2 = trans2.header.stamp.to_sec()
-
-    alpha = 0
-    if (t1 != t2):
-        alpha = (time-t1)/(t2-t1)
-
-    pos1 = trans1.transform.translation
-    pos2 = trans2.transform.translation
-
-    rot1 = trans1.transform.rotation
-    rot1 = [rot1.x,rot1.y,rot1.z,rot1.w]
-    rot2 = trans2.transform.rotation
-    rot2 = [rot2.x,rot2.y,rot2.z,rot2.w]
-
-    res = TransformStamped()
-
-    res.header.stamp = rospy.Time(time)
-    res.header.frame_id = trans1.header.frame_id
-
-    res.transform.translation.x = pos1.x + (pos2.x - pos1.x)*alpha
-    res.transform.translation.y = pos1.y + (pos2.y - pos1.y)*alpha
-    res.transform.translation.z = pos1.z + (pos2.z - pos1.z)*alpha
-
-    res_rot = tf.transformations.quaternion_slerp(rot1,rot2,alpha)
-    res.transform.rotation.x = res_rot[0]
-    res.transform.rotation.y = res_rot[1]
-    res.transform.rotation.z = res_rot[2]
-    res.transform.rotation.w = res_rot[3]
-
-    return res
-
-
-def get_interpolations(target_times, trajectory, transform = True):
-    '''
-    given two trajectories, interploate the poses in trajectory to the times given in target_times (another trajectory)
-    this modifies target_times so it stays in the range of trajectory's interpolations
-    if transform = True, then trajectory stores transform messages not PoseStamped
-    '''
-
-    min_time = trajectory[0].header.stamp.to_sec()
-    max_time = trajectory[-1].header.stamp.to_sec()
-
-    res = []
-
-    last = 0
-
-
-    i = 0
-    while i < len(target_times):
-
-        target = target_times[i]
-        time = target.header.stamp.to_sec()
-
-        if (time < min_time or time > max_time):
-            target_times.pop(i)
-            continue
-        
-        lower_ind = last
-
-
-
-        while (trajectory[lower_ind].header.stamp.to_sec() > time or trajectory[lower_ind+1].header.stamp.to_sec() < time):
-            if (trajectory[lower_ind].header.stamp.to_sec() > time):
-                lower_ind-=1
-            else:
-                lower_ind+=1
-        
-        #last = lower_ind +1
-
-    
-
-        if ((i+1) < len(target_times)):
-            next_time = target_times[i+1].header.stamp.to_sec()
-            if (next_time >= trajectory[lower_ind+1]):
-                last = lower_ind+1
-            else:
-                last = lower_ind
-        else:
-            last = lower_ind
-
-        #last = (lower_ind+1) if ((lower_ind+2)<len(trajectory)) else lower_ind
-
-        if (transform):
-            inter = interpolate_transform(time, trajectory[lower_ind], trajectory[lower_ind+1])
-        else:
-            inter = interpolate_pose(time, trajectory[lower_ind], trajectory[lower_ind+1])
-
-
-        res.append(inter)
-        i+=1
-    
-    return res
-
-
-def transform_trajectory(trajectory, transformations):
-    ''' translate each point in trajectory by a transformation interpolated to the correct time, return the transformed trajectory'''
-
-    # for each point in trajectory, find the interpolated transformation, then transform the trajectory point
-
-    matching_transforms = get_interpolations(trajectory, transformations)
-
-    res = []
-
-    for i in range(len(matching_transforms)):
-        trans = matching_transforms[i]
-        traj_pose = trajectory[i]
-
-        transformed = tf2_geometry_msgs.do_transform_pose(traj_pose, trans)
-        res.append(transformed)
-
-    return res
-
-
-
-
-
 
 def publish_costmap_msg(traj_debug=False):
     global trajectory
@@ -473,7 +307,7 @@ def publish_costmap_msg(traj_debug=False):
 
     print("")
     print("Reading SOGMs")
-    collider_preds = read_collider_preds("/plan_costmap_3D", bag)
+    collider_data = read_collider_preds("/plan_costmap_3D", bag)
     print("OK")
     print("")
 
@@ -485,44 +319,74 @@ def publish_costmap_msg(traj_debug=False):
 
     print("")
     print("Reading tf traj")
-    map_frame = "map"
-    odom_to_base = read_tf_transform("odom","base_link", bag)
-    map_to_odom = read_tf_transform(map_frame,"odom", bag)
-
-
-
-    pose = tfBuffer.lookup_transform('map', 'velodyne', stamp)
-    T_q = np.array([pose.transform.translation.x,
-                    pose.transform.translation.y,
-                    pose.transform.translation.z,
-                    pose.transform.rotation.x,
-                    pose.transform.rotation.y,
-                    pose.transform.rotation.z,
-                    pose.transform.rotation.w], dtype=np.float64)
-    self.poses[f_i] = T_q
-
     
-    print()
-    print(len(odom_to_base))
-    print(odom_to_base[0])
-    print(type(odom_to_base[0]))
+    # Create tf buffer and listenner
+    tfBuffer = tf2_ros.Buffer(cache_time=rospy.Duration(20000))
 
-    print()
-    print(len(map_to_odom))
-    print(map_to_odom[0])
-    print(type(map_to_odom[0]))
-    print()
-
-
-    a = 1/0
+    # Fill the buffer with tf and tf_static msgs
+    for topic, msg, t in bag.read_messages(topics=['/tf', '/tf_static']):
+        for msg_tf in msg.transforms:
+            if topic == '/tf_static':
+                tfBuffer.set_transform_static(msg_tf, "default_authority")
+            else:
+                tfBuffer.set_transform(msg_tf, "default_authority")
 
 
+    # Now get transform at every timestamp we need
+    all_origin_times = [None for _ in collider_data['header_stamp']]
+    all_origin_poses = [None for _ in collider_data['header_stamp']]
+    all_computed_times = [None for _ in collider_data['header_stamp']]
+    all_computed_poses = [None for _ in collider_data['header_stamp']]
+    valid_collider = np.ones((collider_data['header_stamp'].shape[0],), dtype=bool)
+    for i, (stamp_secs, origin) in enumerate(zip(collider_data['header_stamp'], collider_data['origin'])):
+        stamp0 = rospy.Time.from_sec(origin[2])
+        stamp1 = rospy.Time.from_sec(stamp_secs)
 
-    odom_to_base = transforms_to_trajectory(odom_to_base)
-    tf_traj = transform_trajectory(odom_to_base, map_to_odom)
+        for stamp, time_list, pose_list in zip([stamp0, stamp1],
+                                               [all_origin_times, all_computed_times],
+                                               [all_origin_poses, all_computed_poses]):
+
+            try:
+                pose = tfBuffer.lookup_transform('map', 'velodyne', stamp)
+
+            except (tf2_ros.InvalidArgumentException, tf2_ros.LookupException, tf2_ros.ExtrapolationException) as e:
+                valid_collider[i] = False
+                continue
+
+            T_q = np.array([pose.transform.translation.x,
+                            pose.transform.translation.y,
+                            pose.transform.translation.z,
+                            pose.transform.rotation.x,
+                            pose.transform.rotation.y,
+                            pose.transform.rotation.z,
+                            pose.transform.rotation.w], dtype=np.float64)
+
+            time_list[i] = stamp.to_sec()
+            pose_list[i] = T_q
+
     print("OK")
     print("")
 
+
+    ##############
+    # Prepare Data
+    ##############
+
+    # Filter invalid data
+    valid_collider = np.array(valid_collider, dtype=bool)
+
+    for k, v in collider_data.items():
+        collider_data[k] = v[valid_collider]
+
+    all_origin_poses = [_ for _, is_valid in zip(all_origin_poses, valid_collider) if is_valid]
+    all_computed_poses = [_ for _, is_valid in zip(all_computed_poses, valid_collider) if is_valid]
+    all_origin_times = [_ for _, is_valid in zip(all_origin_times, valid_collider) if is_valid]
+    all_computed_times = [_ for _, is_valid in zip(all_computed_times, valid_collider) if is_valid]
+    
+    all_origin_times = np.array(all_origin_times, dtype=np.float64)
+    all_computed_times = np.array(all_computed_times, dtype=np.float64)
+    all_origin_poses = np.stack(all_origin_poses, axis=0)
+    all_computed_poses = np.stack(all_computed_poses, axis=0)
 
     ############
     # Create GUI
@@ -532,35 +396,115 @@ def publish_costmap_msg(traj_debug=False):
     # Use wanted_inds GUI for picking point in trajectory with slider
     # Use slider for translation / rotations
 
+    # Init ros publishers
+    collision_pub = rospy.Publisher('/plan_costmap_3D', VoxGrid, queue_size=1)
+    pointcloud_pub = rospy.Publisher('/colli_points', PointCloud2, queue_size=10)
+    #pub = rospy.Publisher('/p3dx/move_base/TebLocalPlannerROS/obstacles', ObstacleArrayMsg, queue_size=1)
+    rospy.init_node("test_obstacle_msg")
 
-    print(len(tf_traj))
-    print(tf_traj[0])
-    print(type(tf_traj[0]))
 
+    # Figure
+    global f_i
+    f_i = 0
+    fig, (axA, axB) = plt.subplots(1, 2, figsize=(14, 7))
+    plt.subplots_adjust(left=0.1, bottom=0.15)
+
+    # Plot first frame of seq
+    vmin = np.min(all_origin_times)
+    vmax = np.max(all_origin_times)
+    scales = np.ones_like(all_origin_times)
+    scales[f_i] = 10.0
+    plotsB = [axB.scatter(all_origin_poses[:, 0],
+                          all_origin_poses[:, 1],
+                          s=scales,
+                          c=all_origin_times,
+                          cmap='jet',
+                          vmin=vmin,
+                          vmax=vmax)]
+
+    axB.set_aspect('equal', adjustable='box')
+    
+    # Make a horizontal slider to control the frequency.
+    axcolor = 'lightgoldenrodyellow'
+    axtime = plt.axes([0.1, 0.04, 0.8, 0.02], facecolor=axcolor)
+    time_slider = Slider(ax=axtime,
+                         label='ind',
+                         valmin=0,
+                         valmax=len(all_origin_times) - 1,
+                         valinit=0,
+                         valstep=1)
+
+    # The function to be called anytime a slider's value changes
+    def update_PR(val):
+        global f_i
+        f_i = (int)(val)
+        scales = np.ones_like(all_origin_times)
+        scales[f_i] = 10.0
+        plotsB[0].set_sizes(scales)
+
+    # register the update function with each slider
+    time_slider.on_changed(update_PR)
+
+    plt.show()
 
     a = 1/0
 
 
+    # Plot first frame of seq
+    plotsA = [axA.scatter(all_pts[s_ind][0][:, 0],
+                            all_pts[s_ind][0][:, 1],
+                            s=2.0,
+                            c=all_colors[s_ind][0])]
 
-    # Get annotated lidar frames
-    lidar_path = join(simu_path, day, lidar_folder)
-    classif_path = join(simu_path, day, classif_folder)
+    # Show a circle of the loop closure area
+    axA.add_patch(patches.Circle((0, 0), radius=0.2,
+                                    edgecolor=[0.2, 0.2, 0.2],
+                                    facecolor=[1.0, 0.79, 0],
+                                    fill=True,
+                                    lw=1))
 
-    f_names = [f for f in listdir(lidar_path) if f[-4:] == '.ply']
-    f_times = np.array([float(f[:-4]) for f in f_names], dtype=np.float64)
-    f_names = np.array([join(lidar_path, f) for f in f_names])
-    ordering = np.argsort(f_times)
-    f_names = f_names[ordering]
-    f_times = f_times[ordering]
+    plt.subplots_adjust(left=0.1, bottom=0.15)
 
-    # Load mapping poses
-    map_traj_file = join(simu_path, day, 'logs-'+day, 'map_traj.ply')
-    data = read_ply(map_traj_file)
-    map_T = np.vstack([data['pos_x'], data['pos_y'], data['pos_z']]).T
-    map_Q = np.vstack([data['rot_x'], data['rot_y'], data['rot_z'], data['rot_w']]).T
+    # # Customize the graph
+    # axA.grid(linestyle='-.', which='both')
+    axA.set_xlim(-im_lim, im_lim)
+    axA.set_ylim(-im_lim, im_lim)
+    axA.set_aspect('equal', adjustable='box')
+    
+    # Make a horizontal slider to control the frequency.
+    axcolor = 'lightgoldenrodyellow'
+    axtime = plt.axes([0.1, 0.04, 0.8, 0.02], facecolor=axcolor)
+    time_slider = Slider(ax=axtime,
+                            label='ind',
+                            valmin=0,
+                            valmax=len(all_pts[s_ind]) - 1,
+                            valinit=0,
+                            valstep=1)
 
-    # Times
-    day_map_t = data['time']
+    # The function to be called anytime a slider's value changes
+    def update_PR(val):
+        global f_i
+        f_i = (int)(val)
+        for plot_i, plot_obj in enumerate(plotsA):
+            plot_obj.set_offsets(all_pts[s_ind][f_i])
+            plot_obj.set_color(all_colors[s_ind][f_i])
+
+    # register the update function with each slider
+    time_slider.on_changed(update_PR)
+
+
+
+
+
+
+
+
+
+
+
+
+
+    a = 1/0
 
     # Convert map to homogenous rotation/translation matrix
     map_R = scipyR.from_quat(map_Q)
