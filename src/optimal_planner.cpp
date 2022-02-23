@@ -1093,6 +1093,15 @@ void TebOptimalPlanner::AddEdgesPredictedCostmap()
 
 void TebOptimalPlanner::AddEdgesPredictedCostmap3D()
 {
+  
+  // if weight equals zero skip adding edges, just add the visualization stuff
+  if (cfg_->optim.weight_predicted_costmap==0 || cfg_->optim.weight_static_costmap==0)
+  {
+    teb_.pose_layer = std::vector<double>(teb_.sizePoses(), -1.0);
+    for(int index = 0; index < teb_.sizePoses(); index++)
+      teb_.pose_layer[index] =  (double)index / (double)teb_.sizePoses();
+    return; 
+  }
 
   ROS_WARN_THROTTLE(10, "Added edge for predicted costmap[3D]");
   
@@ -1161,9 +1170,6 @@ void TebOptimalPlanner::AddEdgesPredictedCostmap3D()
       // ROS_WARN_STREAM("         ------- edge " << index << " => " << continuous_layer << "  ignored");
       teb_.pose_layer[index] = 2.0;
     }
-        
-
-
   }
 
 }
