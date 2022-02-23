@@ -1,21 +1,20 @@
 #!/usr/bin/env python3
 
-# Author: franz.albers@tu-dortmund.de
-
 import rospy
 import math
 import tf
 import pickle
 import os
+import rosbag
 import numpy as np
 from costmap_converter.msg import ObstacleArrayMsg, ObstacleMsg
-from geometry_msgs.msg import PolygonStamped, Point32, QuaternionStamped, Quaternion, TwistWithCovariance
+from geometry_msgs.msg import PolygonStamped, Point32, QuaternionStamped, Quaternion, TwistWithCovariance, PoseStamped, TransformStamped
 from tf.transformations import quaternion_from_euler
 from vox_msgs.msg import VoxGrid
 from nav_msgs.msg import OccupancyGrid, MapMetaData
-from ros_numpy import point_cloud2 as pc2
 from sensor_msgs.msg import PointCloud2
 from teb_local_planner.msg import FeedbackMsg, TrajectoryMsg, TrajectoryPointMsg
+import tf2_geometry_msgs
 
 import matplotlib.pyplot as plt
 
@@ -28,15 +27,12 @@ def feedback_callback(data):
         return
     trajectory = data.trajectories[data.selected_trajectory_idx].trajectory
 
-
-
 def load_saved_costmaps(file_path):
 
     with open(file_path, 'rb') as f:
         collider_data = pickle.load(f)
 
     return collider_data
-
 
 def get_collisions_msg(collision_preds, t0, origin0, dl_2D, time_resolution):
 
@@ -60,7 +56,6 @@ def get_collisions_msg(collision_preds, t0, origin0, dl_2D, time_resolution):
     msg.data = collision_preds.ravel().tolist()
 
     return msg
-
 
 def get_collisions_visu_msg(collision_preds, t0, origin0, dl_2D, visu_T=15):
     '''
@@ -103,7 +98,6 @@ def get_collisions_visu_msg(collision_preds, t0, origin0, dl_2D, visu_T=15):
 
     return msg
 
-
 def get_pred_points(collision_preds, t0, origin0, dl_2D, dt):
 
     # Get mask of the points we want to show
@@ -133,8 +127,6 @@ def get_pred_points(collision_preds, t0, origin0, dl_2D, dt):
 
     return np.stack((xv, yv, tv), 1), labels
 
-
-
 def get_pointcloud_msg(new_points, labels):
 
     # data structure of binary blob output for PointCloud2 data type
@@ -152,7 +144,6 @@ def get_pointcloud_msg(new_points, labels):
 
     return msg
 
-
 def plot_velocity_profile(fig, ax_v, ax_omega, t, v, omega):
     ax_v.cla()
     ax_v.grid()
@@ -166,24 +157,449 @@ def plot_velocity_profile(fig, ax_v, ax_omega, t, v, omega):
     fig.canvas.draw()
 
 
+#
+#
+#
+#
+##########################################################################################################################################################
+#
+#
+#
+#
+
+
+def read_collider_preds(topic_name, bagfile):
+    '''returns list of Voxgrid message'''
+
+    all_header_stamp = []
+    all_dims = []
+    all_origin = []
+    all_dl = []
+    all_dt = []
+    all_preds = []
+
+    for topic, msg, t in bagfile.read_messages(topics=[topic_name]):
+
+        all_header_stamp.append(msg.header.stamp.to_sec())
+        all_dims.append([msg.depth, msg.width, msg.height])
+        all_origin.append([msg.origin.x, msg.origin.y, msg.origin.z])
+        all_dl.append(msg.dl)
+        all_dt.append(msg.dt)
+        array_data = np.frombuffer(msg.data, dtype=np.uint8)
+        all_preds.append(array_data.tolist())
+
+    collider_data = {}
+
+    collider_data['header_stamp'] = np.array(all_header_stamp, dtype=np.float64)
+    collider_data['dims'] = np.array(all_dims, dtype=np.int32)
+    collider_data['origin'] = np.array(all_origin, dtype=np.float64)
+    collider_data['dl'] = np.array(all_dl, dtype=np.float32)
+    collider_data['dt'] = np.array(all_dt, dtype=np.float32)
+    collider_data['preds'] = np.array(all_preds, dtype=np.uint8)
+
+    return collider_data
+
+def read_local_plans(topic_name, bagfile):
+    '''returns list of local plan message'''
+
+    local_plans = []
+
+    for topic, msg, t in bagfile.read_messages(topics=[topic_name]):
+
+        path_dict = {}
+        path_dict['header_stamp'] = msg.header.stamp.to_sec()
+        path_dict['header_frame_id'] = msg.header.frame_id
+
+        pose_list = []
+        for msg_pose in msg.poses:
+            pose = (msg_pose.pose.position.x,
+                    msg_pose.pose.position.y,
+                    msg_pose.pose.position.z,
+                    msg_pose.pose.orientation.x,
+                    msg_pose.pose.orientation.y,
+                    msg_pose.pose.orientation.z,
+                    msg_pose.pose.orientation.w)
+            pose_list.append(pose)
+
+        path_dict['pose_list'] = pose_list
+
+        local_plans.append(path_dict)
+
+    return local_plans
+
+def read_tf_transform(parent_frame, child_frame, bagfile, static=False):
+    ''' returns a list of time stamped transforms between parent frame and child frame '''
+    arr = []
+    if (static):
+        topic_name = "/tf_static"
+    else:
+        topic_name = "/tf"
+
+    for topic, msg, t in bagfile.read_messages(topics=[topic_name]):
+        for transform in msg.transforms:
+            if (transform.header.frame_id == parent_frame and transform.child_frame_id == child_frame):
+                arr.append(transform)
+
+    return arr
+
+def transforms_to_trajectory(transforms):
+    ''' converts a list of time stamped transforms to a list of pose stamped messages, where the pose is that of the child frame relative to it's parent'''
+    traj = []
+    for transform in transforms:
+        geo_msg = PoseStamped()
+        geo_msg.header = transform.header
+        geo_msg.header.frame_id = transform.child_frame_id
+        geo_msg.pose.position = transform.transform.translation
+        geo_msg.pose.orientation = transform.transform.rotation
+        traj.append(geo_msg)
+
+    return traj
+
+def interpolate_pose(time, pose1, pose2):
+    ''' given a target time, and two PoseStamped messages, find the interpolated pose between pose1 and pose2 ''' 
+
+    t1 = pose1.header.stamp.to_sec()
+    t2 = pose2.header.stamp.to_sec()
+
+    alpha = 0
+    if (t1 != t2):
+        alpha = (time-t1)/(t2-t1)
+
+    pos1 = pose1.pose.position
+    pos2 = pose2.pose.position
+
+    rot1 = pose1.pose.orientation
+    rot1 = [rot1.x,rot1.y,rot1.z,rot1.w]
+    rot2 = pose2.pose.orientation
+    rot2 = [rot2.x,rot2.y,rot2.z,rot2.w]
+
+    res = PoseStamped()
+
+    res.header.stamp = rospy.Time(time)
+    res.header.frame_id = pose1.header.frame_id
+
+    res.pose.position.x = pos1.x + (pos2.x - pos1.x)*alpha
+    res.pose.position.y = pos1.y + (pos2.y - pos1.y)*alpha
+    res.pose.position.z = pos1.z + (pos2.z - pos1.z)*alpha
+
+    res_rot = tf.transformations.quaternion_slerp(rot1,rot2,alpha)
+    res.pose.orientation.x = res_rot[0]
+    res.pose.orientation.y = res_rot[1]
+    res.pose.orientation.z = res_rot[2]
+    res.pose.orientation.w = res_rot[3]
+
+    return res
+
+def interpolate_transform(time, trans1, trans2):
+    ''' given a target time, and two TransformStamped messages, find the interpolated transform ''' 
+
+    t1 = trans1.header.stamp.to_sec()
+    t2 = trans2.header.stamp.to_sec()
+
+    alpha = 0
+    if (t1 != t2):
+        alpha = (time-t1)/(t2-t1)
+
+    pos1 = trans1.transform.translation
+    pos2 = trans2.transform.translation
+
+    rot1 = trans1.transform.rotation
+    rot1 = [rot1.x,rot1.y,rot1.z,rot1.w]
+    rot2 = trans2.transform.rotation
+    rot2 = [rot2.x,rot2.y,rot2.z,rot2.w]
+
+    res = TransformStamped()
+
+    res.header.stamp = rospy.Time(time)
+    res.header.frame_id = trans1.header.frame_id
+
+    res.transform.translation.x = pos1.x + (pos2.x - pos1.x)*alpha
+    res.transform.translation.y = pos1.y + (pos2.y - pos1.y)*alpha
+    res.transform.translation.z = pos1.z + (pos2.z - pos1.z)*alpha
+
+    res_rot = tf.transformations.quaternion_slerp(rot1,rot2,alpha)
+    res.transform.rotation.x = res_rot[0]
+    res.transform.rotation.y = res_rot[1]
+    res.transform.rotation.z = res_rot[2]
+    res.transform.rotation.w = res_rot[3]
+
+    return res
+
+
+def get_interpolations(target_times, trajectory, transform = True):
+    '''
+    given two trajectories, interploate the poses in trajectory to the times given in target_times (another trajectory)
+    this modifies target_times so it stays in the range of trajectory's interpolations
+    if transform = True, then trajectory stores transform messages not PoseStamped
+    '''
+
+    min_time = trajectory[0].header.stamp.to_sec()
+    max_time = trajectory[-1].header.stamp.to_sec()
+
+    res = []
+
+    last = 0
+
+
+    i = 0
+    while i < len(target_times):
+
+        target = target_times[i]
+        time = target.header.stamp.to_sec()
+
+        if (time < min_time or time > max_time):
+            target_times.pop(i)
+            continue
+        
+        lower_ind = last
+
+
+
+        while (trajectory[lower_ind].header.stamp.to_sec() > time or trajectory[lower_ind+1].header.stamp.to_sec() < time):
+            if (trajectory[lower_ind].header.stamp.to_sec() > time):
+                lower_ind-=1
+            else:
+                lower_ind+=1
+        
+        #last = lower_ind +1
+
+    
+
+        if ((i+1) < len(target_times)):
+            next_time = target_times[i+1].header.stamp.to_sec()
+            if (next_time >= trajectory[lower_ind+1]):
+                last = lower_ind+1
+            else:
+                last = lower_ind
+        else:
+            last = lower_ind
+
+        #last = (lower_ind+1) if ((lower_ind+2)<len(trajectory)) else lower_ind
+
+        if (transform):
+            inter = interpolate_transform(time, trajectory[lower_ind], trajectory[lower_ind+1])
+        else:
+            inter = interpolate_pose(time, trajectory[lower_ind], trajectory[lower_ind+1])
+
+
+        res.append(inter)
+        i+=1
+    
+    return res
+
+
+def transform_trajectory(trajectory, transformations):
+    ''' translate each point in trajectory by a transformation interpolated to the correct time, return the transformed trajectory'''
+
+    # for each point in trajectory, find the interpolated transformation, then transform the trajectory point
+
+    matching_transforms = get_interpolations(trajectory, transformations)
+
+    res = []
+
+    for i in range(len(matching_transforms)):
+        trans = matching_transforms[i]
+        traj_pose = trajectory[i]
+
+        transformed = tf2_geometry_msgs.do_transform_pose(traj_pose, trans)
+        res.append(transformed)
+
+    return res
+
+
+
+
+
+
 def publish_costmap_msg(traj_debug=False):
     global trajectory
     
-    if traj_debug:
-        topic_name = "/test_optim_node/teb_feedback"
-        topic_name = rospy.get_param('~feedback_topic', topic_name)
-        rospy.Subscriber(topic_name, FeedbackMsg, feedback_callback, queue_size=1)
+    # if traj_debug:
+    #     topic_name = "/test_optim_node/teb_feedback"
+    #     topic_name = rospy.get_param('~feedback_topic', topic_name)
+    #     rospy.Subscriber(topic_name, FeedbackMsg, feedback_callback, queue_size=1)
 
-        rospy.loginfo("Visualizing velocity profile published on '%s'.",topic_name) 
-        rospy.loginfo("Make sure to enable rosparam 'publish_feedback' in the teb_local_planner.")
+    #     rospy.loginfo("Visualizing velocity profile published on '%s'.",topic_name) 
+    #     rospy.loginfo("Make sure to enable rosparam 'publish_feedback' in the teb_local_planner.")
             
-        fig, (ax_v, ax_omega) = plt.subplots(2, sharex=True)
-        plt.ion()
-        plt.show()
+    #     fig, (ax_v, ax_omega) = plt.subplots(2, sharex=True)
+    #     plt.ion()
+    #     plt.show()
 
     # Rosbag path
     bag_path =  os.path.join(os.environ.get('HOME'), 'results/rosbag_data')
+
+    # List all bag files
+    bag_files = np.sort([f for f in os.listdir(bag_path) if f.endswith('.bag')])
+
+    # Chose one
+    bag_chosen = os.path.join(bag_path, bag_files[-1])
+
+    # Read Bag file
+    print("")
+    print("Initializing data for file :" + bag_chosen)
+    try:
+        bag = rosbag.Bag(bag_chosen)
+    except:
+        print("ERROR: invalid filename")
+    print("OK")
+    print("")
+
+
+    # Read SOGMs
+    # Read TEB plan
+    # Read TEB planned poses
+    # Read trajectory
+
+    # Select a point on the trajectory have two axes 
+    #   one with the full traj an a point on the currentyl selected pose
+    #   another with the first layer of predicted sogm for this timestamp
+
+    # Publish the coressponding stuff:
+    #   - Costmap centered on 0 for the test_optim_node
+    #   - Include delay in the costmap publication
+    #   - Coresponding TEB plan at this time
+
+    # Add possibility of modification
+    #   - translate/rotate the costmap for testing
+    #   - Add reduce delay
+
+    # Now play with parameters
+
+
+    ##################
+    # Reading messages
+    ##################
+
+    print("")
+    print("Reading SOGMs")
+    collider_preds = read_collider_preds("/plan_costmap_3D", bag)
+    print("OK")
+    print("")
+
+    print("")
+    print("Reading TEB plans")
+    teb_local_plans = read_local_plans("/move_base/TebLocalPlannerROS/local_plan", bag)
+    print("OK")
+    print("")
+
+    print("")
+    print("Reading tf traj")
+    map_frame = "map"
+    odom_to_base = read_tf_transform("odom","base_link", bag)
+    map_to_odom = read_tf_transform(map_frame,"odom", bag)
+
+
+
+    pose = tfBuffer.lookup_transform('map', 'velodyne', stamp)
+    T_q = np.array([pose.transform.translation.x,
+                    pose.transform.translation.y,
+                    pose.transform.translation.z,
+                    pose.transform.rotation.x,
+                    pose.transform.rotation.y,
+                    pose.transform.rotation.z,
+                    pose.transform.rotation.w], dtype=np.float64)
+    self.poses[f_i] = T_q
+
     
+    print()
+    print(len(odom_to_base))
+    print(odom_to_base[0])
+    print(type(odom_to_base[0]))
+
+    print()
+    print(len(map_to_odom))
+    print(map_to_odom[0])
+    print(type(map_to_odom[0]))
+    print()
+
+
+    a = 1/0
+
+
+
+    odom_to_base = transforms_to_trajectory(odom_to_base)
+    tf_traj = transform_trajectory(odom_to_base, map_to_odom)
+    print("OK")
+    print("")
+
+
+    ############
+    # Create GUI
+    ############
+
+    # Use replayer.py for the loading of info
+    # Use wanted_inds GUI for picking point in trajectory with slider
+    # Use slider for translation / rotations
+
+
+    print(len(tf_traj))
+    print(tf_traj[0])
+    print(type(tf_traj[0]))
+
+
+    a = 1/0
+
+
+
+    # Get annotated lidar frames
+    lidar_path = join(simu_path, day, lidar_folder)
+    classif_path = join(simu_path, day, classif_folder)
+
+    f_names = [f for f in listdir(lidar_path) if f[-4:] == '.ply']
+    f_times = np.array([float(f[:-4]) for f in f_names], dtype=np.float64)
+    f_names = np.array([join(lidar_path, f) for f in f_names])
+    ordering = np.argsort(f_times)
+    f_names = f_names[ordering]
+    f_times = f_times[ordering]
+
+    # Load mapping poses
+    map_traj_file = join(simu_path, day, 'logs-'+day, 'map_traj.ply')
+    data = read_ply(map_traj_file)
+    map_T = np.vstack([data['pos_x'], data['pos_y'], data['pos_z']]).T
+    map_Q = np.vstack([data['rot_x'], data['rot_y'], data['rot_z'], data['rot_w']]).T
+
+    # Times
+    day_map_t = data['time']
+
+    # Convert map to homogenous rotation/translation matrix
+    map_R = scipyR.from_quat(map_Q)
+    map_R = map_R.as_matrix()
+    day_map_H = np.zeros((len(day_map_t), 4, 4))
+    day_map_H[:, :3, :3] = map_R
+    day_map_H[:, :3, 3] = map_T
+    day_map_H[:, 3, 3] = 1
+
+    # Filter valid frames
+    f_names, day_map_t, day_map_H = filter_valid_frames(f_names, day_map_t, day_map_H)
+
+    # Load gt_poses
+    gt_t, gt_H = load_gt_poses(simu_path, day)
+    
+    # Init loc abd gt traj
+    gt_traj = gt_H[:, :3, 3]
+    gt_traj[:, 2] = gt_t
+    loc_traj = day_map_H[:, :3, 3]
+    loc_traj[:, 2] = day_map_t
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
