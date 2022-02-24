@@ -445,6 +445,7 @@ def main(traj_debug=False):
         new_origin[1] += offset[1]
         new_origin[2] += delay - collider_data['header_stamp'][f_i]
 
+        # TEMP debug, remove static 
         collider_data['preds'][f_i][0, :, :] = 0
 
 
