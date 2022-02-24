@@ -1124,7 +1124,11 @@ void TebOptimalPlanner::AddEdgesPredictedCostmap3D()
 
   // Only for debugging
   if (prediction_init_time < 0)
+  {
+    ROS_WARN_STREAM("Debug: using delay = " << prediction_init_time << " seconds");
     prediction_init_time = curr_time + prediction_init_time;
+
+  }
 
   // start iterating at second point on teb, the first being the robot pose
   teb_.pose_layer = std::vector<double>(teb_.sizePoses(), -1.0);
