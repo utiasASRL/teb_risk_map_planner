@@ -7,6 +7,7 @@ import pickle
 import os
 import rosbag
 import tf2_ros
+from ros_numpy import point_cloud2 as pc2
 import numpy as np
 from costmap_converter.msg import ObstacleArrayMsg, ObstacleMsg
 from geometry_msgs.msg import PolygonStamped, Point32, QuaternionStamped, Quaternion, TwistWithCovariance, PoseStamped, TransformStamped
@@ -36,7 +37,7 @@ def load_saved_costmaps(file_path):
 
     return collider_data
 
-def get_collisions_msg(collision_preds, t0, origin0, dl_2D, time_resolution):
+def get_collisions_msg(collision_preds, origin0, dl_2D, time_resolution):
 
     # Define header
     msg = VoxGrid()
@@ -51,7 +52,7 @@ def get_collisions_msg(collision_preds, t0, origin0, dl_2D, time_resolution):
     msg.dt = time_resolution
     msg.origin.x = origin0[0]
     msg.origin.y = origin0[1]
-    msg.origin.z = -1.0
+    msg.origin.z = origin0[2]
 
     #msg.theta = q0[0]
     msg.theta = 0
@@ -100,30 +101,28 @@ def get_collisions_visu_msg(collision_preds, t0, origin0, dl_2D, visu_T=15):
 
     return msg
 
-def get_pred_points(collision_preds, t0, origin0, dl_2D, dt):
+def get_pred_points(collision_preds, origin0, dl_2D, dt):
 
     # Get mask of the points we want to show
 
-    mask = collision_preds > 0.8 * 255
+    mask = collision_preds > 0.1 * 255
 
     nt, nx, ny = collision_preds.shape
     
-
-    t = np.arange(0, nt, 1)
+    t = np.arange(0, nt, 1) + 1
     x = np.arange(0, nx, 1)
     y = np.arange(0, ny, 1)
-
     tv, yv, xv = np.meshgrid(t, x, y, indexing='ij')
     
-
     tv = tv[mask].astype(np.float32)
     xv = xv[mask].astype(np.float32)
     yv = yv[mask].astype(np.float32)
 
+    time_factor = 0.3
 
     xv = origin0[0] + (xv + 0.5) * dl_2D
     yv = origin0[1] + (yv + 0.5) * dl_2D
-    tv *= dt * 0.5
+    tv = (origin0[2] + tv * dt) * time_factor
 
     labels = collision_preds[mask].astype(np.float32) / 255
 
@@ -145,18 +144,23 @@ def get_pointcloud_msg(new_points, labels):
     msg = pc2.array_to_pointcloud2(c_points, rospy.get_rostime(), 'odom')
 
     return msg
+    
+def get_obstacle_msg(obstacles, ids, offset):
 
-def plot_velocity_profile(fig, ax_v, ax_omega, t, v, omega):
-    ax_v.cla()
-    ax_v.grid()
-    ax_v.set_ylabel('Trans. velocity [m/s]')
-    ax_v.plot(t, v, '-bx')
-    ax_omega.cla()
-    ax_omega.grid()
-    ax_omega.set_ylabel('Rot. velocity [rad/s]')
-    ax_omega.set_xlabel('Time [s]')
-    ax_omega.plot(t, omega, '-bx')
-    fig.canvas.draw()
+
+    msg = ObstacleArrayMsg()
+    msg.header.stamp = rospy.get_rostime()
+    msg.header.frame_id = 'odom'
+    
+    # Add point obstacles
+    for obst_i, pos in zip(ids, obstacles):
+
+        obstacle_msg = ObstacleMsg()
+        obstacle_msg.id = obst_i
+        obstacle_msg.polygon.points = [Point32(x=pos[0] + offset[0], y=pos[1] + offset[1], z=0.0)]
+        msg.obstacles.append(obstacle_msg)
+
+    return msg
 
 
 #
@@ -199,6 +203,9 @@ def read_collider_preds(topic_name, bagfile):
     collider_data['dt'] = np.array(all_dt, dtype=np.float32)
     collider_data['preds'] = np.array(all_preds, dtype=np.uint8)
 
+    dims = (-1,) + tuple(collider_data['dims'][0])
+    collider_data['preds'] = np.reshape(collider_data['preds'], dims)
+
     return collider_data
 
 def read_local_plans(topic_name, bagfile):
@@ -228,6 +235,33 @@ def read_local_plans(topic_name, bagfile):
         local_plans.append(path_dict)
 
     return local_plans
+    
+def read_obstacles(topic_name, bagfile):
+    '''returns list of local plan message'''
+
+    obstacle_data = {}
+    all_obstacle_ids = []
+    all_obstacles = []
+    all_header_stamp = []
+
+    for topic, msg, t in bagfile.read_messages(topics=[topic_name]):
+
+        all_header_stamp.append(msg.header.stamp.to_sec())
+
+        obst_pts = []
+        obst_ids = []
+        for obst in msg.obstacles:
+            obst_ids.append(obst.id)
+            obst_pts.append([obst.polygon.points[0].x, obst.polygon.points[0].y])
+
+        all_obstacle_ids.append(np.array(obst_ids, dtype=np.int32))
+        all_obstacles.append(np.array(obst_pts, dtype=np.float64))
+
+    obstacle_data['header_stamp'] = np.array(all_header_stamp, dtype=np.float64)
+    obstacle_data['obstacles'] = all_obstacles
+    obstacle_data['ids'] = all_obstacle_ids
+
+    return obstacle_data
 
 def read_tf_transform(parent_frame, child_frame, bagfile, static=False):
     ''' returns a list of time stamped transforms between parent frame and child frame '''
@@ -245,20 +279,7 @@ def read_tf_transform(parent_frame, child_frame, bagfile, static=False):
     return arr
 
 
-def publish_costmap_msg(traj_debug=False):
-    global trajectory
-    
-    # if traj_debug:
-    #     topic_name = "/test_optim_node/teb_feedback"
-    #     topic_name = rospy.get_param('~feedback_topic', topic_name)
-    #     rospy.Subscriber(topic_name, FeedbackMsg, feedback_callback, queue_size=1)
-
-    #     rospy.loginfo("Visualizing velocity profile published on '%s'.",topic_name) 
-    #     rospy.loginfo("Make sure to enable rosparam 'publish_feedback' in the teb_local_planner.")
-            
-    #     fig, (ax_v, ax_omega) = plt.subplots(2, sharex=True)
-    #     plt.ion()
-    #     plt.show()
+def main(traj_debug=False):
 
     # Rosbag path
     bag_path =  os.path.join(os.environ.get('HOME'), 'results/rosbag_data')
@@ -279,28 +300,6 @@ def publish_costmap_msg(traj_debug=False):
     print("OK")
     print("")
 
-
-    # Read SOGMs
-    # Read TEB plan
-    # Read TEB planned poses
-    # Read trajectory
-
-    # Select a point on the trajectory have two axes 
-    #   one with the full traj an a point on the currentyl selected pose
-    #   another with the first layer of predicted sogm for this timestamp
-
-    # Publish the coressponding stuff:
-    #   - Costmap centered on 0 for the test_optim_node
-    #   - Include delay in the costmap publication
-    #   - Coresponding TEB plan at this time
-
-    # Add possibility of modification
-    #   - translate/rotate the costmap for testing
-    #   - Add reduce delay
-
-    # Now play with parameters
-
-
     ##################
     # Reading messages
     ##################
@@ -314,6 +313,12 @@ def publish_costmap_msg(traj_debug=False):
     print("")
     print("Reading TEB plans")
     teb_local_plans = read_local_plans("/move_base/TebLocalPlannerROS/local_plan", bag)
+    print("OK")
+    print("")
+
+    print("")
+    print("Reading Obstacle messages")
+    obst_data = read_obstacles("/move_base/TebLocalPlannerROS/obstacles", bag)
     print("OK")
     print("")
 
@@ -377,6 +382,10 @@ def publish_costmap_msg(traj_debug=False):
 
     for k, v in collider_data.items():
         collider_data[k] = v[valid_collider]
+    
+    obst_data['header_stamp'] = obst_data['header_stamp'][valid_collider]
+    obst_data['obstacles'] = [_ for _, is_valid in zip(obst_data['obstacles'], valid_collider) if is_valid]
+    obst_data['ids'] = [_ for _, is_valid in zip(obst_data['ids'], valid_collider) if is_valid]
 
     all_origin_poses = [_ for _, is_valid in zip(all_origin_poses, valid_collider) if is_valid]
     all_computed_poses = [_ for _, is_valid in zip(all_computed_poses, valid_collider) if is_valid]
@@ -392,250 +401,211 @@ def publish_costmap_msg(traj_debug=False):
     # Create GUI
     ############
 
-    # Use replayer.py for the loading of info
-    # Use wanted_inds GUI for picking point in trajectory with slider
-    # Use slider for translation / rotations
-
     # Init ros publishers
     collision_pub = rospy.Publisher('/plan_costmap_3D', VoxGrid, queue_size=1)
     pointcloud_pub = rospy.Publisher('/colli_points', PointCloud2, queue_size=10)
-    #pub = rospy.Publisher('/p3dx/move_base/TebLocalPlannerROS/obstacles', ObstacleArrayMsg, queue_size=1)
+    obstacle_pub = rospy.Publisher('/test_optim_node/obstacles', ObstacleArrayMsg, queue_size=5)
     rospy.init_node("test_obstacle_msg")
 
 
     # Figure
-    global f_i
+    global f_i, delay, xoff, yoff
+    xoff = 0
+    yoff = 0
+    delay = 0
     f_i = 0
     fig, (axA, axB) = plt.subplots(1, 2, figsize=(14, 7))
     plt.subplots_adjust(left=0.1, bottom=0.15)
 
-    # Plot first frame of seq
+    # Plot trajectory of seq
     vmin = np.min(all_origin_times)
     vmax = np.max(all_origin_times)
     scales = np.ones_like(all_origin_times)
-    scales[f_i] = 10.0
-    plotsB = [axB.scatter(all_origin_poses[:, 0],
-                          all_origin_poses[:, 1],
+    scales[f_i] = 50.0
+    plotsB = [axB.scatter(all_origin_poses[:, 1],
+                          all_origin_times - all_origin_times[0],
                           s=scales,
                           c=all_origin_times,
-                          cmap='jet',
+                          cmap='hsv',
                           vmin=vmin,
                           vmax=vmax)]
 
-    axB.set_aspect('equal', adjustable='box')
-    
-    # Make a horizontal slider to control the frequency.
+    # axB.set_aspect('equal', adjustable='box')
+                     
+    # The function to be called anytime a slider's value changes
+    def publish_costmap():
+        global f_i, delay, xoff, yoff
+        new_origin = np.copy(collider_data['origin'][f_i])
+        offset = -np.copy(all_origin_poses[f_i, :2])
+
+        offset[0] += xoff
+        offset[1] += yoff
+
+        new_origin[0] += offset[0]
+        new_origin[1] += offset[1]
+        new_origin[2] += delay - collider_data['header_stamp'][f_i]
+
+        collider_data['preds'][f_i][0, :, :] = 0
+
+
+        # Get messages
+        collision_msg = get_collisions_msg(collider_data['preds'][f_i],
+                                           new_origin,
+                                           collider_data['dl'][f_i],
+                                           collider_data['dt'][f_i])
+
+        points, labels = get_pred_points(collider_data['preds'][f_i],
+                                         new_origin,
+                                         collider_data['dl'][f_i],
+                                         collider_data['dt'][f_i])
+
+        pt_msg = get_pointcloud_msg(points, labels)
+
+        # Publish
+        collision_pub.publish(collision_msg)
+        pointcloud_pub.publish(pt_msg)
+        obstacle_pub.publish(get_obstacle_msg(obst_data['obstacles'][f_i],
+                                              obst_data['ids'][f_i],
+                                              offset))
+
+        return
+
+    #######################################################################################
+    # Make a horizontal slider to control the frame.
     axcolor = 'lightgoldenrodyellow'
-    axtime = plt.axes([0.1, 0.04, 0.8, 0.02], facecolor=axcolor)
+    axtime = plt.axes([0.55, 0.06, 0.4, 0.02], facecolor=axcolor)
     time_slider = Slider(ax=axtime,
-                         label='ind',
+                         label='frame',
                          valmin=0,
                          valmax=len(all_origin_times) - 1,
                          valinit=0,
                          valstep=1)
 
     # The function to be called anytime a slider's value changes
-    def update_PR(val):
+    def update_frame(val):
         global f_i
         f_i = (int)(val)
         scales = np.ones_like(all_origin_times)
-        scales[f_i] = 10.0
+        scales[f_i] = 50.0
         plotsB[0].set_sizes(scales)
+        publish_costmap()
+    #######################################################################################
+        
+
+    #######################################################################################
+    # Make a horizontal slider to control the frame.
+    axcolor = 'lightgoldenrodyellow'
+    axtime = plt.axes([0.55, 0.03, 0.4, 0.02], facecolor=axcolor)
+    delay_slider = Slider(ax=axtime,
+                         label='delay_offset',
+                         valmin=-1.5,
+                         valmax=2.5,
+                         valinit=0,
+                         valstep=0.01)
+    # The function to be called anytime a slider's value changes
+    def update_delay(val):
+        global delay
+        delay = val
+        publish_costmap()
+    #######################################################################################
+
+    #######################################################################################
+    # Make a horizontal slider to control the frame.
+    axcolor = 'lightgoldenrodyellow'
+    axtime = plt.axes([0.05, 0.06, 0.4, 0.02], facecolor=axcolor)
+    x_slider = Slider(ax=axtime,
+                         label='x_offset',
+                         valmin=-4.0,
+                         valmax=4.0,
+                         valinit=0,
+                         valstep=0.01)
+    # The function to be called anytime a slider's value changes
+    def update_xoff(val):
+        global xoff
+        xoff = val
+        publish_costmap()
+    #######################################################################################
+
+    #######################################################################################
+    # Make a horizontal slider to control the frame.
+    axcolor = 'lightgoldenrodyellow'
+    axtime = plt.axes([0.02, 0.1, 0.01, 0.8], facecolor=axcolor)
+    y_slider = Slider(ax=axtime,
+                      label='y_offset',
+                      valmin=-4.0,
+                      valmax=4.0,
+                      valinit=0,
+                      valstep=0.01,
+                      orientation="vertical")
+    # The function to be called anytime a slider's value changes
+    def update_yoff(val):
+        global yoff
+        yoff = val
+        publish_costmap()
+    #######################################################################################
 
     # register the update function with each slider
-    time_slider.on_changed(update_PR)
+    time_slider.on_changed(update_frame)
+    delay_slider.on_changed(update_delay)
+    x_slider.on_changed(update_xoff)
+    y_slider.on_changed(update_yoff)
 
     plt.show()
 
     a = 1/0
 
 
-    # Plot first frame of seq
-    plotsA = [axA.scatter(all_pts[s_ind][0][:, 0],
-                            all_pts[s_ind][0][:, 1],
-                            s=2.0,
-                            c=all_colors[s_ind][0])]
+    # # Plot first frame of seq
+    # plotsA = [axA.scatter(all_pts[s_ind][0][:, 0],
+    #                         all_pts[s_ind][0][:, 1],
+    #                         s=2.0,
+    #                         c=all_colors[s_ind][0])]
 
-    # Show a circle of the loop closure area
-    axA.add_patch(patches.Circle((0, 0), radius=0.2,
-                                    edgecolor=[0.2, 0.2, 0.2],
-                                    facecolor=[1.0, 0.79, 0],
-                                    fill=True,
-                                    lw=1))
+    # # Show a circle of the loop closure area
+    # axA.add_patch(patches.Circle((0, 0), radius=0.2,
+    #                                 edgecolor=[0.2, 0.2, 0.2],
+    #                                 facecolor=[1.0, 0.79, 0],
+    #                                 fill=True,
+    #                                 lw=1))
 
-    plt.subplots_adjust(left=0.1, bottom=0.15)
+    # plt.subplots_adjust(left=0.1, bottom=0.15)
 
-    # # Customize the graph
-    # axA.grid(linestyle='-.', which='both')
-    axA.set_xlim(-im_lim, im_lim)
-    axA.set_ylim(-im_lim, im_lim)
-    axA.set_aspect('equal', adjustable='box')
+    # # # Customize the graph
+    # # axA.grid(linestyle='-.', which='both')
+    # axA.set_xlim(-im_lim, im_lim)
+    # axA.set_ylim(-im_lim, im_lim)
+    # axA.set_aspect('equal', adjustable='box')
     
-    # Make a horizontal slider to control the frequency.
-    axcolor = 'lightgoldenrodyellow'
-    axtime = plt.axes([0.1, 0.04, 0.8, 0.02], facecolor=axcolor)
-    time_slider = Slider(ax=axtime,
-                            label='ind',
-                            valmin=0,
-                            valmax=len(all_pts[s_ind]) - 1,
-                            valinit=0,
-                            valstep=1)
+    # # Make a horizontal slider to control the frequency.
+    # axcolor = 'lightgoldenrodyellow'
+    # axtime = plt.axes([0.1, 0.04, 0.8, 0.02], facecolor=axcolor)
+    # time_slider = Slider(ax=axtime,
+    #                         label='ind',
+    #                         valmin=0,
+    #                         valmax=len(all_pts[s_ind]) - 1,
+    #                         valinit=0,
+    #                         valstep=1)
 
-    # The function to be called anytime a slider's value changes
-    def update_PR(val):
-        global f_i
-        f_i = (int)(val)
-        for plot_i, plot_obj in enumerate(plotsA):
-            plot_obj.set_offsets(all_pts[s_ind][f_i])
-            plot_obj.set_color(all_colors[s_ind][f_i])
+    # # The function to be called anytime a slider's value changes
+    # def update_PR(val):
+    #     global f_i
+    #     f_i = (int)(val)
+    #     for plot_i, plot_obj in enumerate(plotsA):
+    #         plot_obj.set_offsets(all_pts[s_ind][f_i])
+    #         plot_obj.set_color(all_colors[s_ind][f_i])
 
-    # register the update function with each slider
-    time_slider.on_changed(update_PR)
+    # # register the update function with each slider
+    # time_slider.on_changed(update_PR)
 
-
-
-
+    return
 
 
+#################################################################################################
+#
+# Main call
+# *********
+#
 
-
-
-
-
-
-
-    a = 1/0
-
-    # Convert map to homogenous rotation/translation matrix
-    map_R = scipyR.from_quat(map_Q)
-    map_R = map_R.as_matrix()
-    day_map_H = np.zeros((len(day_map_t), 4, 4))
-    day_map_H[:, :3, :3] = map_R
-    day_map_H[:, :3, 3] = map_T
-    day_map_H[:, 3, 3] = 1
-
-    # Filter valid frames
-    f_names, day_map_t, day_map_H = filter_valid_frames(f_names, day_map_t, day_map_H)
-
-    # Load gt_poses
-    gt_t, gt_H = load_gt_poses(simu_path, day)
-    
-    # Init loc abd gt traj
-    gt_traj = gt_H[:, :3, 3]
-    gt_traj[:, 2] = gt_t
-    loc_traj = day_map_H[:, :3, 3]
-    loc_traj[:, 2] = day_map_t
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    # Load costmaps to publish
-    # simu_path = '/home/hth/Myhal_Simulation/simulated_runs'
-    simu_path = '/home/administrator/1-Deep-Collider/simulated_runs'
-    #folder = '2021-06-07-21-44-58'
-    #pred_file = os.path.join(simu_path, folder, 'logs-' + folder, 'collider_data.pickle')
-    pred_file = os.path.join(simu_path, 'collider_data.pickle')
-    collider_data = load_saved_costmaps(pred_file)
-
-    dl = collider_data['dl'][0]
-    dt0 = collider_data['dt'][0]
-    dt = collider_data['dt'][0]
-    pred_times = collider_data['header_stamp']
-
-    # Init
-    collision_pub = rospy.Publisher('/plan_costmap_3D', VoxGrid, queue_size=1)
-    visu_pub = rospy.Publisher('/collision_visu', OccupancyGrid, queue_size=1)
-    pointcloud_pub = rospy.Publisher('/colli_points', PointCloud2, queue_size=10)
-    #pub = rospy.Publisher('/p3dx/move_base/TebLocalPlannerROS/obstacles', ObstacleArrayMsg, queue_size=1)
-    rospy.init_node("test_obstacle_msg")
-
-    preds_i = 50
-
-    dims = collider_data['dims'][preds_i]
-    preds = np.reshape(collider_data['preds'][preds_i], dims)
-    
-    origin0 = np.copy(collider_data['origin'][0])
-    t0 = origin0[2]
-
-    y_0 = -3.0
-    vel_y = 0.3
-    range_y = 6.0
-
-    r = rospy.Rate(2)  # 10hz
-    t = 0.0
-    visu_T = 0
-    while not rospy.is_shutdown():
-
-        ####################
-        # Publishing pred 3D
-        ####################
-
-        # Vary The costmap layer to publish
-        #visu_T = (visu_T + 1) % preds.shape[0]
-
-        new_origin = np.copy(origin0)
-
-        # new_origin[0] = origin0[0] + 2.0 * np.sin(5.31 * t)
-        # new_origin[1] = origin0[1] + 3.0 * np.sin(t)
-
-        new_origin[0] = origin0[0] + 3.5
-        new_origin[1] = origin0[1] + 0
-        
-        # Get messages
-        collision_msg = get_collisions_msg(preds, t0, new_origin, dl, dt)
-        visu_msg = get_collisions_visu_msg(preds, t0, new_origin, dl, visu_T)
-        points, labels = get_pred_points(preds, t0, new_origin, dl, dt)
-        pt_msg = get_pointcloud_msg(points, labels)
-
-        # Publish
-        collision_pub.publish(collision_msg)
-        visu_pub.publish(visu_msg)
-        pointcloud_pub.publish(pt_msg)
-
-        ###################
-        # Plotting feedback
-        ###################
-
-        if traj_debug:
-            ts = []
-            vs = []
-            omegas = []
-            
-            for point in trajectory:
-                ts.append(point.time_from_start.to_sec())
-                vs.append(point.velocity.linear.x)
-                omegas.append(point.velocity.angular.z)
-                
-            plot_velocity_profile(fig, ax_v, ax_omega, np.asarray(ts), np.asarray(vs), np.asarray(omegas))
-
-
-
-
-        t = t + 0.05
-        r.sleep()
 
 if __name__ == '__main__':
-    global trajectory
-    try:
-        trajectory = []
-        publish_costmap_msg(traj_debug=False)
-    except rospy.ROSInterruptException:
-        pass
+    main(traj_debug=False)

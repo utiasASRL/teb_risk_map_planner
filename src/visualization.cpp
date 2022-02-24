@@ -124,7 +124,7 @@ void TebVisualization::publishLocalPlanAndPoses(const TimedElasticBand& teb) con
 
         // Set length/width/height
         marker.scale.x = 0.6* cfg_->trajectory.dt_ref;
-        marker.scale.y = 0.2 * cfg_->trajectory.dt_ref;
+        marker.scale.y = 0.1 * cfg_->trajectory.dt_ref;
         marker.scale.z = 0.05 * cfg_->trajectory.dt_ref;
 
         // Set color
@@ -166,7 +166,7 @@ void TebVisualization::publishLocalPlanAndPoses(const TimedElasticBand& teb) con
           marker.header.stamp = teb_path.header.stamp;
           marker.ns = "teb_custom";
           double dT = 0.2;
-          double loop_T = 2.0;
+          double loop_T = 0.2;
           marker.id = 100 + (int)(std::floor(std::fmod(teb_path.header.stamp.toSec(), loop_T) / dT));
           marker.type = visualization_msgs::Marker::TEXT_VIEW_FACING;
           marker.action = visualization_msgs::Marker::ADD;

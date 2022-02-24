@@ -133,6 +133,7 @@ bool HomotopyClassPlanner::plan(const PoseSE2& start, const PoseSE2& goal, const
 
   // Init new TEBs based on newly explored homotopy classes
   exploreEquivalenceClassesAndInitTebs(start, goal, cfg_->obstacles.min_obstacle_dist, start_vel);
+
   // update via-points if activated
   updateReferenceTrajectoryViaPoints(cfg_->hcp.viapoints_all_candidates);
   // Optimize all trajectories in alternative homotopy classes
@@ -472,7 +473,9 @@ void HomotopyClassPlanner::updateAllTEBs(const PoseSE2* start, const PoseSE2* go
   {
     it_teb->get()->teb().updateAndPruneTEB(*start, *goal);
     if (start_velocity)
+    {
       it_teb->get()->setVelocityStart(*start_velocity);
+    }
   }
 }
 

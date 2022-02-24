@@ -58,6 +58,7 @@ using namespace teb_local_planner; // it is ok here to import everything for tes
 PlannerInterfacePtr planner;
 TebVisualizationPtr visual;
 std::vector<ObstaclePtr> obst_vector;
+ObstaclePtr goal_ptr;
 ViaPointContainer via_points;
 TebConfig config;
 boost::shared_ptr< dynamic_reconfigure::Server<TebLocalPlannerReconfigureConfig> > dynamic_recfg;
@@ -77,6 +78,7 @@ void CB_customObstacle(const costmap_converter::ObstacleArrayMsg::ConstPtr& obst
 void CB_PredictedCostmap3D(const vox_msgs::VoxGrid& pred_msg);
 void CreateInteractiveMarker(const double& init_x, const double& init_y, unsigned int id, std::string frame, interactive_markers::InteractiveMarkerServer* marker_server, interactive_markers::InteractiveMarkerServer::FeedbackCallback feedback_cb);
 void CB_obstacle_marker(const visualization_msgs::InteractiveMarkerFeedbackConstPtr &feedback);
+void CB_goal_marker(const visualization_msgs::InteractiveMarkerFeedbackConstPtr &feedback);
 void CB_clicked_points(const geometry_msgs::PointStampedConstPtr& point_msg);
 void CB_via_points(const nav_msgs::Path::ConstPtr& via_points_msg);
 void CB_setObstacleVelocity(const geometry_msgs::TwistConstPtr& twist_msg, const unsigned int id);
@@ -116,29 +118,28 @@ int main( int argc, char** argv )
   // interactive marker server for simulated dynamic obstacles
   interactive_markers::InteractiveMarkerServer marker_server("marker_obstacles");
 
-  obst_vector.push_back( boost::make_shared<PointObstacle>(-3,1) );
-  obst_vector.push_back( boost::make_shared<PointObstacle>(6,2) );
-  obst_vector.push_back( boost::make_shared<PointObstacle>(0,0.1) );
-//  obst_vector.push_back( boost::make_shared<LineObstacle>(1,1.5,1,-1.5) ); //90 deg
-//  obst_vector.push_back( boost::make_shared<LineObstacle>(1,0,-1,0) ); //180 deg
-//  obst_vector.push_back( boost::make_shared<PointObstacle>(-1.5,-0.5) );
+  // // Dynamic obstacles
+  // obst_vector.push_back( boost::make_shared<PointObstacle>(-3,1) );
+  // obst_vector.push_back( boost::make_shared<PointObstacle>(6,2) );
+  // Eigen::Vector2d vel (0.1, -0.3);
+  // obst_vector.at(0)->setCentroidVelocity(vel);
+  // vel = Eigen::Vector2d(-0.3, -0.2);
+  // obst_vector.at(1)->setCentroidVelocity(vel);
 
-  // Dynamic obstacles
-  Eigen::Vector2d vel (0.1, -0.3);
-  obst_vector.at(0)->setCentroidVelocity(vel);
-  vel = Eigen::Vector2d(-0.3, -0.2);
-  obst_vector.at(1)->setCentroidVelocity(vel);
-
-  /*
-  PolygonObstacle* polyobst = new PolygonObstacle;
-  polyobst->pushBackVertex(1, -1);
-  polyobst->pushBackVertex(0, 1);
-  polyobst->pushBackVertex(1, 1);
-  polyobst->pushBackVertex(2, 1);
+  // // Static obstacles
+  // obst_vector.push_back( boost::make_shared<LineObstacle>(1,1.5,1,-1.5) ); //90 deg
+  // obst_vector.push_back( boost::make_shared<LineObstacle>(1,0,-1,0) ); //180 deg
+  // obst_vector.push_back( boost::make_shared<PointObstacle>(-1.5,-0.5) );
+  
+  // PolygonObstacle* polyobst = new PolygonObstacle;
+  // polyobst->pushBackVertex(1, -1);
+  // polyobst->pushBackVertex(0, 1);
+  // polyobst->pushBackVertex(1, 1);
+  // polyobst->pushBackVertex(2, 1);
  
-  polyobst->finalizePolygon();
-  obst_vector.emplace_back(polyobst);
-  */
+  // polyobst->finalizePolygon();
+  // obst_vector.emplace_back(polyobst);
+  
   
   for (unsigned int i = 0; i < obst_vector.size(); ++i)
   {
@@ -154,8 +155,14 @@ int main( int argc, char** argv )
       CreateInteractiveMarker(pobst->x(),pobst->y(),i, config.map_frame, &marker_server, &CB_obstacle_marker);  
     }
   }
+
+  // Interactive goal marker
+  goal_ptr = boost::make_shared<PointObstacle>(4.5, 0);
+  boost::shared_ptr<PointObstacle> pgoal = boost::dynamic_pointer_cast<PointObstacle>(goal_ptr);
+  CreateInteractiveMarker(pgoal->x(),pgoal->y(), obst_vector.size() + 1, config.map_frame, &marker_server, &CB_goal_marker);  
   
   marker_server.applyChanges();
+
   
   // Setup visualization
   visual = TebVisualizationPtr(new TebVisualization(n, config));
@@ -186,7 +193,25 @@ void CB_mainCycle(const ros::TimerEvent& e)
 	std::vector<clock_t> t;
   t.push_back(std::clock());
 
-  planner->plan(PoseSE2(0,0,0), PoseSE2(-1, 2.0 ,0)); // hardcoded start and goal for testing purposes
+  // Get goal
+  PointObstacle* pgoal = static_cast<PointObstacle*>(goal_ptr.get());
+  Eigen::Vector2d goal2D = pgoal->position();
+
+  // Get angle to this goal
+  double theta = atan2(goal2D[1], goal2D[0]);
+
+  // Initial velocity
+  geometry_msgs::Twist start_vel;
+  start_vel.linear.x = 1.0;
+  start_vel.linear.y = 0;
+  start_vel.linear.z = 0;
+  start_vel.angular.x = 0;
+  start_vel.angular.y = 0;
+  start_vel.angular.z = 0;
+
+
+  planner->plan(PoseSE2(0,0,theta), PoseSE2(goal2D[0], goal2D[1], theta), &start_vel, true); // hardcoded start and goal for testing purposes
+
 	t.push_back(std::clock());
 
   double duration = 1000 * (t[1] - t[0]) / (double)CLOCKS_PER_SEC;
@@ -274,6 +299,19 @@ void CB_obstacle_marker(const visualization_msgs::InteractiveMarkerFeedbackConst
   pobst->position() = Eigen::Vector2d(feedback->pose.position.x,feedback->pose.position.y);	  
 }
 
+void CB_goal_marker(const visualization_msgs::InteractiveMarkerFeedbackConstPtr &feedback)
+{
+  std::stringstream ss(feedback->marker_name);
+  unsigned int index;
+  ss >> index;
+  
+  if (index != (no_fixed_obstacles + 1))
+    return;
+
+  PointObstacle* pgoal = static_cast<PointObstacle*>(goal_ptr.get());
+  pgoal->position() = Eigen::Vector2d(feedback->pose.position.x,feedback->pose.position.y);
+}
+
 void CB_customObstacle(const costmap_converter::ObstacleArrayMsg::ConstPtr& obst_msg)
 {
   // resize such that the vector contains only the fixed obstacles specified inside the main function
@@ -324,7 +362,7 @@ void CB_customObstacle(const costmap_converter::ObstacleArrayMsg::ConstPtr& obst
 void CB_PredictedCostmap3D(const vox_msgs::VoxGrid& pred_msg)
 {
 
-  ROS_WARN_THROTTLE(30, "VoxMsg");
+  ROS_WARN_THROTTLE(1, "VoxMsg");
 
   PredictedCostmap3D tmp; 
   tmp.initialize(pred_msg);

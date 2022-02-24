@@ -338,8 +338,10 @@ bool TebOptimalPlanner::plan(const PoseSE2& start, const PoseSE2& goal, const ge
       teb_.initTrajectoryToGoal(start, goal, 0, cfg_->robot.max_vel_x, cfg_->trajectory.min_samples, cfg_->trajectory.allow_init_with_backwards_motion);
     }
   }
+
   if (start_vel)
     setVelocityStart(*start_vel);
+
   if (free_goal_vel)
     setVelocityGoalFree();
   else
@@ -1103,7 +1105,7 @@ void TebOptimalPlanner::AddEdgesPredictedCostmap3D()
     return; 
   }
 
-  ROS_WARN_THROTTLE(10, "Added edge for predicted costmap[3D]");
+  ROS_WARN_THROTTLE(1, "Added all edges for predicted costmap[3D]");
   
   // Init information matrix (measure how sure we are of a constraint applied to the optimization)
   // Obstacle use their weight as info, but their weight is a lot higher (50 or 100)
@@ -1120,11 +1122,11 @@ void TebOptimalPlanner::AddEdgesPredictedCostmap3D()
   double curr_time = ros::Time::now().toSec();
   double prediction_init_time = predictions3D_->getInitialTime();
 
+  // Only for debugging
   if (prediction_init_time < 0)
-    prediction_init_time = curr_time;
+    prediction_init_time = curr_time + prediction_init_time;
 
   // start iterating at second point on teb, the first being the robot pose
-  
   teb_.pose_layer = std::vector<double>(teb_.sizePoses(), -1.0);
   for(int index = edge_0; index < teb_.sizePoses() - 1; index += edge_stride)
   {

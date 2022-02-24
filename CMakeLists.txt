@@ -18,6 +18,7 @@ find_package(catkin REQUIRED COMPONENTS
   nav_msgs
   mbf_costmap_core
   mbf_msgs
+  ros_numpy
   roscpp
   std_msgs
   pluginlib
@@ -160,6 +161,7 @@ catkin_package(
 	nav_core
 	nav_msgs
 	pluginlib
+  ros_numpy
 	roscpp
   mbf_costmap_core
 	std_msgs

@@ -1,7 +1,7 @@
-TebLocalPlannerROS:
+test_optim_node:
 
- odom_topic: /odometry/filtered
- map_frame:  map
+#  odom_topic: /odometry/filtered
+#  map_frame:  map
     
  # Trajectory
   
@@ -14,7 +14,7 @@ TebLocalPlannerROS:
  feasibility_check_no_poses: 2
  exact_arc_length: False
 
-#  visualize_with_time_as_z_axis_scale: 0.1
+ visualize_with_time_as_z_axis_scale: 0.3
 
  include_dynamic_obstacles: True    # Default False
 
@@ -76,8 +76,8 @@ TebLocalPlannerROS:
  weight_kinematics_nh: 1000
  weight_kinematics_forward_drive: 2
  weight_kinematics_turning_radius: 1
- weight_optimaltime: 0.8 # must be > 0
- weight_shortest_path: 0.2
+ weight_optimaltime: 0.5 # must be > 0
+ weight_shortest_path: 0.5
 
  weight_obstacle: 0.001                       # Default: 50
  weight_inflation: 0.001                    # Default: 0.1
@@ -87,7 +87,7 @@ TebLocalPlannerROS:
  weight_viapoint: 1
 #  weight_adapt_factor: 2
 
- weight_predicted_costmap: 2.0   # Default: 0.6 direct multiplier of the error function for predicted costmaps
+ weight_predicted_costmap: 0.8   # Default: 0.6 direct multiplier of the error function for predicted costmaps
  weight_static_costmap: 0.8   # Default: 0.6 direct multiplier of the error function for predicted costmaps
 
  # Homotopy Class Planner
