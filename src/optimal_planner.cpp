@@ -1125,7 +1125,8 @@ void TebOptimalPlanner::AddEdgesPredictedCostmap3D()
   // Only for debugging
   if (prediction_init_time < 0)
   {
-    ROS_WARN_STREAM("Debug: using delay = " << prediction_init_time << " seconds");
+    // ROS_WARN_STREAM("Debug: using delay = " << prediction_init_time << " seconds");
+    ROS_WARN_THROTTLE(3, "Debug mode with negative prediction time");
     prediction_init_time = curr_time + prediction_init_time;
 
   }

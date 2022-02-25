@@ -2,6 +2,7 @@
 
 import rospy
 import math
+import copy
 import tf
 import pickle
 import os
@@ -163,6 +164,118 @@ def get_obstacle_msg(obstacles, ids, offset):
     return msg
 
 
+def get_static_visu(static, static_mask, t0, p0, q0, visu_T=15):
+    '''
+    0 = invisible
+    1 -> 98 = blue to red
+    99 = cyan
+    100 = yellow
+    101 -> 127 = green
+    128 -> 254 = red to yellow
+    255 = vert/gris
+    '''
+
+    # Get origin and orientation
+    origin0 = p0 - self.config.in_radius / np.sqrt(2)
+
+    # Define header
+    msg = OccupancyGrid()
+    msg.header.stamp = self.get_clock().now().to_msg()
+    msg.header.frame_id = 'map'
+    msg_static = OccupancyGrid()
+    msg_static.header.stamp = self.get_clock().now().to_msg()
+    msg_static.header.frame_id = 'map'
+
+
+
+    # Define message meta data
+    msg.info.map_load_time = rclTime(seconds=t0.sec, nanoseconds=t0.nanosec).to_msg()
+    msg.info.resolution = self.config.dl_2D
+    msg.info.width = collision_preds.shape[1]
+    msg.info.height = collision_preds.shape[2]
+    msg.info.origin.position.x = origin0[0]
+    msg.info.origin.position.y = origin0[1]
+    msg.info.origin.position.z = -0.011
+    #msg.info.origin.orientation.x = q0[0]
+    #msg.info.origin.orientation.y = q0[1]
+    #msg.info.origin.orientation.z = q0[2]
+    #msg.info.origin.orientation.w = q0[3]
+
+    msg_static.info.map_load_time = rclTime(seconds=t0.sec, nanoseconds=t0.nanosec).to_msg()
+    msg_static.info.resolution = self.config.dl_2D
+    msg_static.info.width = collision_preds.shape[1]
+    msg_static.info.height = collision_preds.shape[2]
+    msg_static.info.origin.position.x = origin0[0]
+    msg_static.info.origin.position.y = origin0[1]
+    msg_static.info.origin.position.z = -0.01
+
+
+    # Define message data
+    #   > static risk: yellow to red
+    #   > dynamic risk: blue to red
+    #   > invisible for the rest of the map
+    # Actually separate them in two different costmaps
+
+    dyn_v = "v0"
+    dynamic_data0 = np.zeros((1, 1))
+    if dyn_v == "v0":
+        dynamic_data = collision_preds[visu_T, :, :].astype(np.float32)
+        dynamic_data *= 1 / 255
+        dynamic_data *= 126
+        dynamic_data0 = np.maximum(0, np.minimum(126, dynamic_data.astype(np.int8)))
+        mask = dynamic_data0 > 0
+        dynamic_data0[mask] += 128
+
+    if dyn_v == "v1":
+        dynamic_mask = collision_preds[1:, :, :] > 180
+        dynamic_data = dynamic_mask.astype(np.float32) * np.expand_dims(np.arange(dynamic_mask.shape[0]), (1, 2))
+        dynamic_data = np.max(dynamic_data, axis=0)
+        dynamic_data *= 1 / np.max(dynamic_data)
+        dynamic_data *= 126
+        dynamic_data0 = np.maximum(0, np.minimum(126, dynamic_data.astype(np.int8)))
+        mask = dynamic_data0 > 0
+        dynamic_data0[mask] += 128
+
+    elif dyn_v == "v2":
+        for iso_i, iso in enumerate([230, 150, 70]):
+
+            dynamic_mask = collision_preds[1:, :, :] > iso
+            dynamic_data = dynamic_mask.astype(np.float32) * np.expand_dims(np.arange(dynamic_mask.shape[0]), (1, 2))
+            dynamic_data = np.max(dynamic_data, axis=0)
+            if iso_i > 0:
+                erode_mask = dynamic_data > 0
+                close_struct = np.ones((5, 5))
+                erode_struct = np.ones((3, 3))
+                erode_mask = ndimage.binary_closing(erode_mask, structure=close_struct, iterations=2)
+                erode_mask = ndimage.binary_erosion(erode_mask, structure=erode_struct)
+                dynamic_data[erode_mask] = 0
+            dynamic_data0 = np.maximum(dynamic_data0, dynamic_data)
+
+        dynamic_data0 *= 1 / np.max(dynamic_data0)
+        dynamic_data0 *= 126
+        dynamic_data0 = np.maximum(0, np.minimum(126, dynamic_data0.astype(np.int8)))
+        mask = dynamic_data0 > 0
+        dynamic_data0[mask] += 128
+
+
+
+
+    # Static risk
+    static_data0 = collision_preds[0, :, :].astype(np.float32)
+    static_data = static_data0 * 98 / 255
+    static_data = static_data * 1.06 - 3
+    static_data = np.maximum(0, np.minimum(98, static_data.astype(np.int8)))
+    static_data[static_mask] = 99
+
+    # Publish
+    msg.data = dynamic_data0.ravel().tolist()
+    msg_static.data = static_data.ravel().tolist()
+    self.visu_pub.publish(msg)
+    self.visu_pub_static.publish(msg_static)
+
+    return
+
+
 #
 #
 #
@@ -262,6 +375,17 @@ def read_obstacles(topic_name, bagfile):
     obstacle_data['ids'] = all_obstacle_ids
 
     return obstacle_data
+    
+def read_static_visu(topic_name, bagfile):
+    '''returns list of local plan message'''
+
+    all_visu_msg = []
+
+    for topic, msg, t in bagfile.read_messages(topics=[topic_name]):
+
+        all_visu_msg.append(msg)
+
+    return all_visu_msg
 
 def read_tf_transform(parent_frame, child_frame, bagfile, static=False):
     ''' returns a list of time stamped transforms between parent frame and child frame '''
@@ -319,6 +443,12 @@ def main(traj_debug=False):
     print("")
     print("Reading Obstacle messages")
     obst_data = read_obstacles("/move_base/TebLocalPlannerROS/obstacles", bag)
+    print("OK")
+    print("")
+
+    print("")
+    print("Reading Static Visu msgs")
+    static_msgs = read_static_visu("/static_visu", bag)
     print("OK")
     print("")
 
@@ -387,6 +517,8 @@ def main(traj_debug=False):
     obst_data['obstacles'] = [_ for _, is_valid in zip(obst_data['obstacles'], valid_collider) if is_valid]
     obst_data['ids'] = [_ for _, is_valid in zip(obst_data['ids'], valid_collider) if is_valid]
 
+    static_msgs = [_ for _, is_valid in zip(static_msgs, valid_collider) if is_valid]
+
     all_origin_poses = [_ for _, is_valid in zip(all_origin_poses, valid_collider) if is_valid]
     all_computed_poses = [_ for _, is_valid in zip(all_computed_poses, valid_collider) if is_valid]
     all_origin_times = [_ for _, is_valid in zip(all_origin_times, valid_collider) if is_valid]
@@ -405,6 +537,7 @@ def main(traj_debug=False):
     collision_pub = rospy.Publisher('/plan_costmap_3D', VoxGrid, queue_size=1)
     pointcloud_pub = rospy.Publisher('/colli_points', PointCloud2, queue_size=10)
     obstacle_pub = rospy.Publisher('/test_optim_node/obstacles', ObstacleArrayMsg, queue_size=5)
+    static_pub = rospy.Publisher('/static_visu', OccupancyGrid, queue_size=10)
     rospy.init_node("test_obstacle_msg")
 
 
@@ -446,25 +579,33 @@ def main(traj_debug=False):
         new_origin[2] += delay - collider_data['header_stamp'][f_i]
 
         # TEMP debug, remove static 
-        collider_data['preds'][f_i][0, :, :] = 0
+        dynamic_layers = np.copy(collider_data['preds'][f_i])
+        dynamic0_layers = np.copy(dynamic_layers)
+        dynamic0_layers[0, :, :] = 0
 
 
         # Get messages
-        collision_msg = get_collisions_msg(collider_data['preds'][f_i],
+        collision_msg = get_collisions_msg(dynamic_layers,
                                            new_origin,
                                            collider_data['dl'][f_i],
                                            collider_data['dt'][f_i])
 
-        points, labels = get_pred_points(collider_data['preds'][f_i],
+        points, labels = get_pred_points(dynamic0_layers,
                                          new_origin,
                                          collider_data['dl'][f_i],
                                          collider_data['dt'][f_i])
 
         pt_msg = get_pointcloud_msg(points, labels)
 
+        static_msg = copy.deepcopy(static_msgs[f_i])
+        static_msg.header.frame_id = 'odom'
+        static_msg.info.origin.position.x = new_origin[0]
+        static_msg.info.origin.position.y = new_origin[1]
+
         # Publish
         collision_pub.publish(collision_msg)
         pointcloud_pub.publish(pt_msg)
+        static_pub.publish(static_msg)
         obstacle_pub.publish(get_obstacle_msg(obst_data['obstacles'][f_i],
                                               obst_data['ids'][f_i],
                                               offset))
