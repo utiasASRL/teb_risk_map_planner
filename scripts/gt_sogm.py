@@ -5,6 +5,7 @@ import math
 import copy
 import time
 import tf
+import sys
 import pickle
 import os
 import rosbag
@@ -25,6 +26,8 @@ from scipy.spatial.transform import Rotation as scipyR
 
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider, Button, RadioButtons
+
+from utils.ply import read_ply, write_ply
 
 
 def feedback_callback(data):
@@ -172,118 +175,6 @@ def get_obstacle_msg(obstacles, ids, offset):
         msg.obstacles.append(obstacle_msg)
 
     return msg
-
-
-def get_static_visu(static, static_mask, t0, p0, q0, visu_T=15):
-    '''
-    0 = invisible
-    1 -> 98 = blue to red
-    99 = cyan
-    100 = yellow
-    101 -> 127 = green
-    128 -> 254 = red to yellow
-    255 = vert/gris
-    '''
-
-    # Get origin and orientation
-    origin0 = p0 - self.config.in_radius / np.sqrt(2)
-
-    # Define header
-    msg = OccupancyGrid()
-    msg.header.stamp = self.get_clock().now().to_msg()
-    msg.header.frame_id = 'map'
-    msg_static = OccupancyGrid()
-    msg_static.header.stamp = self.get_clock().now().to_msg()
-    msg_static.header.frame_id = 'map'
-
-
-
-    # Define message meta data
-    msg.info.map_load_time = rclTime(seconds=t0.sec, nanoseconds=t0.nanosec).to_msg()
-    msg.info.resolution = self.config.dl_2D
-    msg.info.width = collision_preds.shape[1]
-    msg.info.height = collision_preds.shape[2]
-    msg.info.origin.position.x = origin0[0]
-    msg.info.origin.position.y = origin0[1]
-    msg.info.origin.position.z = -0.011
-    #msg.info.origin.orientation.x = q0[0]
-    #msg.info.origin.orientation.y = q0[1]
-    #msg.info.origin.orientation.z = q0[2]
-    #msg.info.origin.orientation.w = q0[3]
-
-    msg_static.info.map_load_time = rclTime(seconds=t0.sec, nanoseconds=t0.nanosec).to_msg()
-    msg_static.info.resolution = self.config.dl_2D
-    msg_static.info.width = collision_preds.shape[1]
-    msg_static.info.height = collision_preds.shape[2]
-    msg_static.info.origin.position.x = origin0[0]
-    msg_static.info.origin.position.y = origin0[1]
-    msg_static.info.origin.position.z = -0.01
-
-
-    # Define message data
-    #   > static risk: yellow to red
-    #   > dynamic risk: blue to red
-    #   > invisible for the rest of the map
-    # Actually separate them in two different costmaps
-
-    dyn_v = "v0"
-    dynamic_data0 = np.zeros((1, 1))
-    if dyn_v == "v0":
-        dynamic_data = collision_preds[visu_T, :, :].astype(np.float32)
-        dynamic_data *= 1 / 255
-        dynamic_data *= 126
-        dynamic_data0 = np.maximum(0, np.minimum(126, dynamic_data.astype(np.int8)))
-        mask = dynamic_data0 > 0
-        dynamic_data0[mask] += 128
-
-    if dyn_v == "v1":
-        dynamic_mask = collision_preds[1:, :, :] > 180
-        dynamic_data = dynamic_mask.astype(np.float32) * np.expand_dims(np.arange(dynamic_mask.shape[0]), (1, 2))
-        dynamic_data = np.max(dynamic_data, axis=0)
-        dynamic_data *= 1 / np.max(dynamic_data)
-        dynamic_data *= 126
-        dynamic_data0 = np.maximum(0, np.minimum(126, dynamic_data.astype(np.int8)))
-        mask = dynamic_data0 > 0
-        dynamic_data0[mask] += 128
-
-    elif dyn_v == "v2":
-        for iso_i, iso in enumerate([230, 150, 70]):
-
-            dynamic_mask = collision_preds[1:, :, :] > iso
-            dynamic_data = dynamic_mask.astype(np.float32) * np.expand_dims(np.arange(dynamic_mask.shape[0]), (1, 2))
-            dynamic_data = np.max(dynamic_data, axis=0)
-            if iso_i > 0:
-                erode_mask = dynamic_data > 0
-                close_struct = np.ones((5, 5))
-                erode_struct = np.ones((3, 3))
-                erode_mask = ndimage.binary_closing(erode_mask, structure=close_struct, iterations=2)
-                erode_mask = ndimage.binary_erosion(erode_mask, structure=erode_struct)
-                dynamic_data[erode_mask] = 0
-            dynamic_data0 = np.maximum(dynamic_data0, dynamic_data)
-
-        dynamic_data0 *= 1 / np.max(dynamic_data0)
-        dynamic_data0 *= 126
-        dynamic_data0 = np.maximum(0, np.minimum(126, dynamic_data0.astype(np.int8)))
-        mask = dynamic_data0 > 0
-        dynamic_data0[mask] += 128
-
-
-
-
-    # Static risk
-    static_data0 = collision_preds[0, :, :].astype(np.float32)
-    static_data = static_data0 * 98 / 255
-    static_data = static_data * 1.06 - 3
-    static_data = np.maximum(0, np.minimum(98, static_data.astype(np.int8)))
-    static_data[static_mask] = 99
-
-    # Publish
-    msg.data = dynamic_data0.ravel().tolist()
-    msg_static.data = static_data.ravel().tolist()
-    self.visu_pub.publish(msg)
-    self.visu_pub_static.publish(msg_static)
-
-    return
 
 
 def read_collider_preds(topic_name, bagfile):
@@ -449,6 +340,46 @@ def get_xyz_points(cloud_array, remove_nans=True, dtype=np.float32, label_field=
     return points
 
 
+def project_points_to_2D(pts, grid_L, grid_dl):
+    
+
+    # Center grid on the curent cloud
+    grid_origin = np.array([[-grid_L/2, -grid_L/2]], dtype=np.float32)
+
+    # Number of cells in the grid
+    grid_N = int(np.ceil(grid_L / grid_dl))
+
+    # Transform pts coordinates to pixel coordiantes
+    pix = np.floor((pts[..., :2] - grid_origin) / grid_dl).astype(np.int32)
+    pix = np.unique(pix, axis=0)
+
+    # Get prediction shape
+    supp_dims = tuple(pix.shape[:-2])
+    pix = np.reshape(pix, (-1,) + tuple(pix.shape[-2:]))
+    fused_D = pix.shape[0]
+    
+    # Get layers indices for 3 dims indexing
+    pix1 = pix[:, :, 0]
+    pix2 = pix[:, :, 1]
+    pix_layers = np.expand_dims(np.arange(fused_D, dtype=np.int32), axis=1) * np.ones_like(pix1)
+
+    # Grid limits
+    valid_mask = np.logical_and(pix1 >= 0, pix1 < grid_N)
+    valid_mask = np.logical_and(valid_mask, pix2 >= 0)
+    valid_mask = np.logical_and(valid_mask, pix2 < grid_N)
+
+    pix0 = pix_layers[valid_mask]
+    pix1 = pix1[valid_mask]
+    pix2 = pix2[valid_mask]
+
+    # Fill grid
+    grid_data = np.zeros((fused_D, grid_N, grid_N), np.uint8)
+    grid_data[pix0, pix2, pix1] = 255
+
+    # Reshape with original supp dimensions
+    return np.reshape(grid_data, supp_dims + (grid_N, grid_N))
+
+
 #################################################################################################
 #
 # Callback
@@ -457,10 +388,34 @@ def get_xyz_points(cloud_array, remove_nans=True, dtype=np.float32, label_field=
 
 class Callbacks:
 
-    def __init__(self, tfBuffer0, tfListener0):
+    def __init__(self, tfBuffer0, tfListener0, actor_times, actor_xy):
+
+        self.actor_times = actor_times
+        self.actor_xy = actor_xy
 
         self.tfBuffer = tfBuffer0
         self.tfListener = tfListener0
+
+        # Spatial dimensions
+        self.in_radius = 8
+        self.dl_2D = 0.12
+        
+        # Prediction until T=4.0s
+        self.dt = 0.1
+        self.n_2D_layers = 40
+        self.T = self.n_2D_layers * self.dt
+
+        # Prepare actor shape as a list of 2D points
+        self.actor_r = 0.35
+        shape_x = np.arange(0.0, self.actor_r + self.dl_2D, self.dl_2D)
+        shape_x = np.hstack((shape_x, shape_x[1:] * -1.0))
+        shape_y = np.copy(shape_x)
+        shape_X, shape_Y = np.meshgrid(shape_x, shape_y)
+        self.actor_shape = np.vstack((shape_X.ravel(), shape_Y.ravel())).T
+        mask = np.linalg.norm(self.actor_shape, axis=1) < self.actor_r
+        self.actor_shape = self.actor_shape[mask]
+
+        self.visu_pub = rospy.Publisher('/static_visu', OccupancyGrid, queue_size=10)
 
         return
 
@@ -512,6 +467,7 @@ class Callbacks:
             print()
             return
 
+        # Get pose data
         T_q = np.array([pose.transform.translation.x,
                         pose.transform.translation.y,
                         pose.transform.translation.z,
@@ -519,35 +475,300 @@ class Callbacks:
                         pose.transform.rotation.y,
                         pose.transform.rotation.z,
                         pose.transform.rotation.w], dtype=np.float64)
+    
+        # Get translation and rotation matrices
+        T = T_q[:3]
+        R = scipyR.from_quat(T_q[3:]).as_matrix()
 
         print()
         print('Got pose:')
-        print(T_q)
+        print(T)
+        print(R)
         print()
-    
-        # Get translation and rotation matrices
-        T = pose[:3] 
-        q = pose[3:]
-        R = scipyR.from_quat(q).as_matrix()
 
 
         #####################
         # Get the static sogm
         #####################
 
-        # Apply tranformation to align input
-        aligned_pts = np.dot(frame_pts, R.T) + T
+        # Apply tranformation to align input, but recenter on p0
+        p0 = np.copy(T)
+        aligned_pts = np.dot(xyz_points, R.T)  # + T
+
+        # write_ply('testesteststets.ply',
+        #           [aligned_pts, labels],
+        #           ['x', 'y', 'z', 'gtlabels'])
+
+        # a = 1/0
+
+        # Get static obstacles (not ground and not dynamic people)
+        min_z = 0.2
+        max_z = 1.2
+        static_mask = np.logical_and(labels > 0, labels != 2)
+        static_mask = np.logical_and(static_mask, aligned_pts[:, 2] > min_z)
+        static_mask = np.logical_and(static_mask, aligned_pts[:, 2] < max_z)
+        static_pts = aligned_pts[static_mask]
+        # dyn_pts = aligned_pts[labels == 2]
+
+        # Project on a 2D grid
+        grid_L = 2 * self.in_radius / np.sqrt(2)
+        static_grid = project_points_to_2D(static_pts, grid_L, self.dl_2D)
+
+
+        ######################
+        # Get the dynamic sogm
+        ######################
+
+        # Get actors future at this timestamp
+        t0 = ptcloud2_msg.header.stamp.to_sec()
+        fut_times = np.arange(t0, t0 + self.T + 0.1 * self.dt, self.dt)
+
+        if (fut_times[0] < self.actor_times[0]):
+            print()
+            print('Current frame time too early compared to saved actor times')
+            print()
+            return
+
+        if (fut_times[-1] > self.actor_times[-1]):
+            print()
+            print('Current frame time too late compared to saved actor times')
+            print()
+            return
+
+        # Relevant actor times
+        fut_i = np.searchsorted(self.actor_times, fut_times)
+
+        # Actor xy positions interpolated (T, n_actors, 2)
+        prev_xy = self.actor_xy[fut_i - 1, :, :]
+        next_xy = self.actor_xy[fut_i, :, :]
+        prev_t = self.actor_times[fut_i - 1]
+        next_t = self.actor_times[fut_i]
+        alpha = (fut_times - prev_t) / (next_t - prev_t)
+        alpha = np.expand_dims(alpha, (1, 2))
+        interp_xy = (1-alpha) * prev_xy + alpha * next_xy
+
+        # Recenter on p0
+        interp_xy = interp_xy - p0[:2]
+
+        # Actor have a shape, we just use circle here (T, n_actors, n_shape, 2)
+        dyn_xy = np.expand_dims(interp_xy, 2) + np.expand_dims(self.actor_shape, (0, 1))
+        dyn_xy = np.reshape(dyn_xy, (self.n_2D_layers + 1, -1, 2))
+
+        # Create dynamic predictions
+        
+        print(dyn_xy.shape)
+
+        dyn_grid = project_points_to_2D(dyn_xy, grid_L, self.dl_2D)
+
+        print(dyn_grid.shape, dyn_grid.dtype)
+        print(static_grid.shape, static_grid.dtype)
+
+        dyn_visu = (np.max(dyn_grid, axis=0).astype(np.float32) * 97 / 255).astype(np.int8)
+
+        mask = static_grid > 0
+
+        print(mask.shape, mask.dtype)
+        print(dyn_visu.shape, dyn_visu.dtype)
+
+        dyn_visu[mask] = -2
+        
+        print(dyn_visu.shape, dyn_visu.dtype)
+        print(np.unique(dyn_visu))
+
+        self.publish_static_visu(dyn_visu, ptcloud2_msg.header.stamp, p0)
+
+
+
+
+        # TODO: Add moving points and make that cleaner
+
+
+
+
+
                     
 
         return
 
+    def publish_static_visu(self, static_visu, t0, p0):
+        '''
+        0 = invisible
+        1 -> 98 = blue to red
+        99 = cyan
+        100 = yellow
+        101 -> 127 = green
+        128 -> 254 = red to yellow
+        255 = vert/gris
+        '''
+
+        # Get origin and orientation
+        origin0 = p0 - self.in_radius / np.sqrt(2)
+
+        # Define header
+        msg = OccupancyGrid()
+        msg.header.stamp = rospy.get_rostime()
+        msg.header.frame_id = 'map'
+
+        # Define message meta data
+        msg.info.map_load_time = t0
+        msg.info.resolution = self.dl_2D
+        msg.info.width = static_visu.shape[0]
+        msg.info.height = static_visu.shape[1]
+        msg.info.origin.position.x = origin0[0]
+        msg.info.origin.position.y = origin0[1]
+        msg.info.origin.position.z = -0.011
+
+        # Publish
+        msg.data = static_visu.ravel().tolist()
+        self.visu_pub.publish(msg)
+
+        return
+
+
+    def publish_collisions(self, collision_preds, stamp0, p0, q0):
+
+        # Get origin and orientation
+        origin0 = p0 - self.config.in_radius / np.sqrt(2)
+
+        # Define header
+        msg = VoxGrid()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.header.frame_id = 'map'
+
+        # Define message
+        msg.depth = collision_preds.shape[0]
+        msg.width = collision_preds.shape[1]
+        msg.height = collision_preds.shape[2]
+        msg.dl = self.config.dl_2D
+        msg.dt = self.time_resolution
+        msg.origin.x = origin0[0]
+        msg.origin.y = origin0[1]
+        msg.origin.z = stamp0  # This is already the converted float value (message type is float64)
+
+        #msg.theta = q0[0]
+        msg.theta = 0.0
+
+        msg.data = collision_preds.ravel().tolist()
+
+        # Publish
+        self.collision_pub.publish(msg)
+
+        return
+
+    def publish_collisions_visu(self, collision_preds, static_mask, t0, p0, q0, visu_T=15):
+        '''
+        0 = invisible
+        1 -> 98 = blue to red
+        99 = cyan
+        100 = yellow
+        101 -> 127 = green
+
+        128 -> 254 = red to yellow
+        255 = vert/gris
+
+        -127 -> -2 = red to yellow
+        -1 = vert/gris
+        '''
+
+        # Get origin and orientation
+        origin0 = p0 - self.config.in_radius / np.sqrt(2)
+
+        # Define header
+        msg = OccupancyGrid()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.header.frame_id = 'map'
+        msg_static = OccupancyGrid()
+        msg_static.header.stamp = self.get_clock().now().to_msg()
+        msg_static.header.frame_id = 'map'
+
+
+
+        # Define message meta data
+        msg.info.map_load_time = rclTime(seconds=t0.sec, nanoseconds=t0.nanosec).to_msg()
+        msg.info.resolution = self.config.dl_2D
+        msg.info.width = collision_preds.shape[1]
+        msg.info.height = collision_preds.shape[2]
+        msg.info.origin.position.x = origin0[0]
+        msg.info.origin.position.y = origin0[1]
+        msg.info.origin.position.z = -0.011
+        #msg.info.origin.orientation.x = q0[0]
+        #msg.info.origin.orientation.y = q0[1]
+        #msg.info.origin.orientation.z = q0[2]
+        #msg.info.origin.orientation.w = q0[3]
+
+        msg_static.info.map_load_time = rclTime(seconds=t0.sec, nanoseconds=t0.nanosec).to_msg()
+        msg_static.info.resolution = self.config.dl_2D
+        msg_static.info.width = collision_preds.shape[1]
+        msg_static.info.height = collision_preds.shape[2]
+        msg_static.info.origin.position.x = origin0[0]
+        msg_static.info.origin.position.y = origin0[1]
+        msg_static.info.origin.position.z = -0.01
+
+
+        # Define message data
+        #   > static risk: yellow to red
+        #   > dynamic risk: blue to red
+        #   > invisible for the rest of the map
+        # Actually separate them in two different costmaps
+
+        dyn_v = "v2"
+        dynamic_data0 = np.zeros((1, 1))
+        if dyn_v == "v0":
+            dynamic_data = collision_preds[visu_T, :, :].astype(np.float32)
+            dynamic_data *= 1 / 255
+            dynamic_data *= 126
+            dynamic_data0 = np.maximum(0, np.minimum(126, dynamic_data.astype(np.int8)))
+            mask = dynamic_data0 > 0
+            dynamic_data0[mask] += 128
+
+        if dyn_v == "v1":
+            dynamic_mask = collision_preds[1:, :, :] > 180
+            dynamic_data = dynamic_mask.astype(np.float32) * np.expand_dims(np.arange(dynamic_mask.shape[0]), (1, 2))
+            dynamic_data = np.max(dynamic_data, axis=0)
+            dynamic_data *= 1 / np.max(dynamic_data)
+            dynamic_data *= 126
+            dynamic_data0 = np.maximum(0, np.minimum(126, dynamic_data.astype(np.int8)))
+            mask = dynamic_data0 > 0
+            dynamic_data0[mask] += 128
+
+        elif dyn_v == "v2":
+            for iso_i, iso in enumerate([230, 150, 70]):
+
+                dynamic_mask = collision_preds[1:, :, :] > iso
+                dynamic_data = dynamic_mask.astype(np.float32) * np.expand_dims(np.arange(dynamic_mask.shape[0]), (1, 2))
+                dynamic_data = np.max(dynamic_data, axis=0)
+                if iso_i > 0:
+                    erode_mask = dynamic_data > 0
+                    close_struct = np.ones((5, 5))
+                    erode_struct = np.ones((3, 3))
+                    erode_mask = ndimage.binary_closing(erode_mask, structure=close_struct, iterations=2)
+                    erode_mask = ndimage.binary_erosion(erode_mask, structure=erode_struct)
+                    dynamic_data[erode_mask] = 0
+                dynamic_data0 = np.maximum(dynamic_data0, dynamic_data)
+
+            dynamic_data0 *= 1 / np.max(dynamic_data0)
+            dynamic_data0 *= 126
+            dynamic_data0 = np.maximum(0, np.minimum(126, dynamic_data0.astype(np.int8)))
+            mask = dynamic_data0 > 0
+            dynamic_data0[mask] += 128
 
 
 
 
+        # Static risk
+        static_data0 = collision_preds[0, :, :].astype(np.float32)
+        static_data = static_data0 * 98 / 255
+        static_data = static_data * 1.06 - 3
+        static_data = np.maximum(0, np.minimum(98, static_data.astype(np.int8)))
+        static_data[static_mask] = 99
 
+        # Publish
+        msg.data = dynamic_data0.ravel().tolist()
+        msg_static.data = static_data.ravel().tolist()
+        self.visu_pub.publish(msg)
+        self.visu_pub_static.publish(msg_static)
 
-
+        return
 
 #################################################################################################
 #
@@ -615,7 +836,7 @@ def main():
     tfListener = tf2_ros.TransformListener(tfBuffer,
                                            queue_size=10)
 
-    my_callbacks = Callbacks(tfBuffer, tfListener)
+    my_callbacks = Callbacks(tfBuffer, tfListener, actor_times, actor_xy)
 
     rospy.Subscriber("/velodyne_points", PointCloud2, my_callbacks.velo_callback)
     
