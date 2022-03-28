@@ -67,6 +67,7 @@ void TebVisualization::initialize(ros::NodeHandle& nh, const TebConfig& cfg)
   vis_custom_pub_ = nh.advertise<visualization_msgs::MarkerArray>("teb_pose_layer", 100);
   teb_marker_pub_ = nh.advertise<visualization_msgs::Marker>("teb_markers", 1000);
   feedback_pub_ = nh.advertise<teb_local_planner::FeedbackMsg>("teb_feedback", 10);  
+  delay_pub_ = nh.advertise<std_msgs::Float32>("sogm_delay", 10);
   
   initialized_ = true; 
 }
@@ -103,6 +104,14 @@ void TebVisualization::publishLocalPlanAndPoses(const TimedElasticBand& teb) con
 
     // Custom visualization: message of the poses colored via their association to the costmap
     visualization_msgs::MarkerArray marker_array;
+
+    // Add a first marker that deletes all old markers
+    visualization_msgs::Marker markerD;
+    markerD.header.frame_id = cfg_->map_frame;
+    markerD.action = visualization_msgs::Marker::DELETEALL;
+    marker_array.markers.push_back(markerD);
+
+    // Add new arrows
     if (teb.pose_layer.size() > 0)
     {
       for (int i=0; i < teb.sizePoses(); i++)
@@ -155,50 +164,54 @@ void TebVisualization::publishLocalPlanAndPoses(const TimedElasticBand& teb) con
         marker_array.markers.push_back(marker);
       }
 
+
+
       // Add text with SOGM delay
-      for (int i=0; i < teb.sizePoses(); i++)
-      {
-        if (teb.pose_layer[i] > -0.5 && teb.pose_layer[i] < 1.5)
-        {
-          // Create arrow marker
-          visualization_msgs::Marker marker;
-          marker.header.frame_id = cfg_->map_frame;
-          marker.header.stamp = teb_path.header.stamp;
-          marker.ns = "teb_custom";
-          double dT = 0.2;
-          double loop_T = 0.2;
-          marker.id = 100 + (int)(std::floor(std::fmod(teb_path.header.stamp.toSec(), loop_T) / dT));
-          marker.type = visualization_msgs::Marker::TEXT_VIEW_FACING;
-          marker.action = visualization_msgs::Marker::ADD;
-
-          // Set data
-          int precisionVal = 2;
-          double delay = teb.pose_layer[i] * 3.0;
-          marker.text = std::to_string(delay).substr(0, std::to_string(delay).find(".") + precisionVal + 1);
-          double beta = std::min(std::max((delay - 0.3) / (1.2 - 0.3), 0.0), 1.0);
-          marker.color.a = 0.8;
-          marker.color.r = beta;
-          marker.color.g = 1.0 - beta / 2;
-          marker.color.b = 0.0;
-
-          // Set pose amd orientation
-          marker.pose.position.x = teb.Pose(0).x();
-          marker.pose.position.y = teb.Pose(0).y();
-          marker.pose.position.z = 0.2 * delay + 0.3;
-          marker.pose.orientation = tf::createQuaternionMsgFromYaw(teb.Pose(i).theta());
-
-          // Set length/width/height
-          marker.scale.z = 0.6 * cfg_->trajectory.dt_ref;
-
-          marker_array.markers.push_back(marker);
-
-          break;
-        }
-      }
+      std_msgs::Float32 delay_msg;
+      delay_msg.data=teb.sogm_delay;
+      delay_pub_.publish(delay_msg);
 
       
+      // for (int i=0; i < teb.sizePoses(); i++)
+      // {
+      //   if (teb.pose_layer[i] > -0.5 && teb.pose_layer[i] < 1.5)
+      //   {
+      //     // Create arrow marker
+      //     visualization_msgs::Marker marker;
+      //     marker.header.frame_id = cfg_->map_frame;
+      //     marker.header.stamp = teb_path.header.stamp;
+      //     marker.ns = "teb_custom";
+      //     double dT = 0.2;
+      //     double loop_T = 0.2;
+      //     marker.id = 100 + (int)(std::floor(std::fmod(teb_path.header.stamp.toSec(), loop_T) / dT));
+      //     marker.type = visualization_msgs::Marker::TEXT_VIEW_FACING;
+      //     marker.action = visualization_msgs::Marker::ADD;
 
+      //     // Set data
+      //     int precisionVal = 2;
+      //     double delay = teb.sogm_delay;
+      //     marker.text = std::to_string(delay).substr(0, std::to_string(delay).find(".") + precisionVal + 1);
+      //     double beta = std::min(std::max((delay - 0.3) / (1.2 - 0.3), 0.0), 1.0);
+      //     marker.color.a = 0.8;
+      //     marker.color.r = beta;
+      //     marker.color.g = 1.0 - beta / 2;
+      //     marker.color.b = 0.0;
 
+      //     // Set pose amd orientation
+      //     marker.pose.position.x = teb.Pose(0).x();
+      //     marker.pose.position.y = teb.Pose(0).y();
+      //     marker.pose.position.z = 0.2 * delay + 0.3;
+      //     marker.pose.orientation = tf::createQuaternionMsgFromYaw(teb.Pose(i).theta());
+
+      //     // Set length/width/height
+      //     marker.scale.z = 0.6 * cfg_->trajectory.dt_ref;
+
+      //     marker_array.markers.push_back(marker);
+
+      //     break;
+      //   }
+      // }
+      
       vis_custom_pub_.publish(marker_array);
     }
     

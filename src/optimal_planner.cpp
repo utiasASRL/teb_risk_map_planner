@@ -1102,6 +1102,7 @@ void TebOptimalPlanner::AddEdgesPredictedCostmap3D()
     teb_.pose_layer = std::vector<double>(teb_.sizePoses(), -1.0);
     for(int index = 0; index < teb_.sizePoses(); index++)
       teb_.pose_layer[index] =  (double)index / (double)teb_.sizePoses();
+    teb_.sogm_delay = 0.0;
     return; 
   }
 
@@ -1133,6 +1134,7 @@ void TebOptimalPlanner::AddEdgesPredictedCostmap3D()
 
   // start iterating at second point on teb, the first being the robot pose
   teb_.pose_layer = std::vector<double>(teb_.sizePoses(), -1.0);
+  teb_.sogm_delay = curr_time - prediction_init_time;
   for(int index = edge_0; index < teb_.sizePoses() - 1; index += edge_stride)
   {
 
