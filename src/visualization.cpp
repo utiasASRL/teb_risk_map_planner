@@ -67,6 +67,7 @@ void TebVisualization::initialize(ros::NodeHandle& nh, const TebConfig& cfg)
   vis_custom_pub_ = nh.advertise<visualization_msgs::MarkerArray>("teb_pose_layer", 100);
   teb_marker_pub_ = nh.advertise<visualization_msgs::Marker>("teb_markers", 1000);
   feedback_pub_ = nh.advertise<teb_local_planner::FeedbackMsg>("teb_feedback", 10);  
+  delay_pub_ = nh.advertise<std_msgs::Float32>("sogm_delay", 10);
   
   initialized_ = true; 
 }
@@ -156,6 +157,7 @@ void TebVisualization::publishLocalPlanAndPoses(const TimedElasticBand& teb) con
       }
 
       // Add text with SOGM delay
+      std_msgs::Float32 delay_msg;
       for (int i=0; i < teb.sizePoses(); i++)
       {
         if (teb.pose_layer[i] > -0.5 && teb.pose_layer[i] < 1.5)
@@ -173,7 +175,8 @@ void TebVisualization::publishLocalPlanAndPoses(const TimedElasticBand& teb) con
 
           // Set data
           int precisionVal = 2;
-          double delay = teb.pose_layer[i] * 3.0;
+          double delay = teb.pose_layer[i] * teb.pose_layer_nT * teb.pose_layer_dt;
+          delay_msg.data=delay;
           marker.text = std::to_string(delay).substr(0, std::to_string(delay).find(".") + precisionVal + 1);
           double beta = std::min(std::max((delay - 0.3) / (1.2 - 0.3), 0.0), 1.0);
           marker.color.a = 0.8;
@@ -195,10 +198,7 @@ void TebVisualization::publishLocalPlanAndPoses(const TimedElasticBand& teb) con
           break;
         }
       }
-
-      
-
-
+      delay_pub_.publish(delay_msg);
       vis_custom_pub_.publish(marker_array);
     }
     

@@ -58,6 +58,7 @@
 #include <iterator>
 
 // messages
+#include <std_msgs/Float32.h>
 #include <nav_msgs/Path.h>
 #include <geometry_msgs/PoseStamped.h>
 #include <geometry_msgs/PoseArray.h>
@@ -257,6 +258,7 @@ protected:
   ros::Publisher vis_custom_pub_; //!< Publisher for the trajectory pose sequence colored via their layer in the 3D costmap
   ros::Publisher teb_marker_pub_; //!< Publisher for visualization markers
   ros::Publisher feedback_pub_; //!< Publisher for the feedback message for analysis and debug purposes
+  ros::Publisher delay_pub_; //!< Publisher for the delay
   
   const TebConfig* cfg_; //!< Config class that stores and manages all related parameters
   
