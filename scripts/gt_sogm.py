@@ -108,6 +108,167 @@ def get_pointcloud_msg(new_points, stamp, frame_id, intensity=None):
 
     return msg
 
+
+def debug_get_diffused_risk(collision_gts, diffused_risk):
+
+    # Figure
+    global dl, xoff, yoff, fake_sogm, valuee
+    xoff = 0
+    yoff = 0
+    dl = 2
+    valuee = 0.99
+    fake_sogm = np.copy(collision_gts.cpu().numpy())
+    fig, (axA, axB) = plt.subplots(1, 2, figsize=(14, 7))
+    plt.subplots_adjust(left=0.1, bottom=0.15)
+
+    images = []
+    images.append(axA.imshow(fake_sogm[2]))
+    images.append(axB.imshow(diffused_risk[2]))
+                    
+    # The function to be called anytime a slider's value changes
+    def update_image_1():
+        global dl, xoff, yoff, fake_sogm
+
+        # Add obstacle in the image at the wanted postion
+        fake_sogm2 = np.copy(fake_sogm[2])
+
+        yoff1 = (fake_sogm2.shape[0] - 1) - yoff
+        u0 = max(yoff1 - dl, 0)
+        u1 = min(yoff1 + dl, fake_sogm2.shape[0])
+        v0 = max(xoff - dl, 0)
+        v1 = min(xoff + dl, fake_sogm2.shape[1])
+        fake_sogm2[u0:u1, v0:v1, -1] = valuee
+        
+        fake_sogm2[45:50, 40:60, -1] = np.maximum(fake_sogm2[45:50, 40:60, -1], 0.39)
+        
+        # Update images
+        images[0].set_array(fake_sogm2)
+        
+        plt.draw()
+
+        return images
+                
+    # The function to be called anytime a slider's value changes
+    def update_image_2():
+        
+        # Add obstacle in the image at the wanted postion
+        fake_sogm_visu = np.copy(fake_sogm)
+
+        yoff1 = (fake_sogm_visu.shape[1] - 1) - yoff
+        u0 = max(yoff1 - dl, 0)
+        u1 = min(yoff1 + dl, fake_sogm_visu.shape[1])
+        v0 = max(xoff - dl, 0)
+        v1 = min(xoff + dl, fake_sogm_visu.shape[2])
+        fake_sogm_visu[2, u0:u1, v0:v1, -1] = valuee
+        
+        fake_sogm_visu[2, 45:50, 40:60, -1] = np.maximum(fake_sogm_visu[2, 45:50, 40:60, -1], 0.39)
+        
+        diffused_fake, obst_pos, static_mask = my_callbacks.get_diffused_risk(torch.from_numpy(fake_sogm_visu).to(my_callbacks.device))
+
+        images[1].set_array(diffused_fake[2])
+
+        plt.draw()
+
+        return images
+
+    #######################################################################################
+    # Make a horizontal slider to control x.
+    axcolor = 'lightgoldenrodyellow'
+    axtime = plt.axes([0.05, 0.06, 0.4, 0.02], facecolor=axcolor)
+    x_slider = Slider(ax=axtime,
+                      label='frame',
+                      valmin=0,
+                      valmax=collision_gts.shape[2],
+                      valinit=0,
+                      valstep=1)
+
+    # The function to be called anytime a slider's value changes
+    def update_xoff(val):
+        global xoff
+        xoff = int(val)
+        return update_image_1()
+    #######################################################################################
+
+    #######################################################################################
+    # Make a vertical slider to control y.
+    axcolor = 'lightgoldenrodyellow'
+    axtime = plt.axes([0.02, 0.1, 0.01, 0.8], facecolor=axcolor)
+    y_slider = Slider(ax=axtime,
+                      label='y_offset',
+                      valmin=0,
+                      valmax=collision_gts.shape[1],
+                      valinit=0,
+                      valstep=1,
+                      orientation="vertical")
+
+    # The function to be called anytime a slider's value changes
+    def update_yoff(val):
+        global yoff
+        yoff = int(val)
+        return update_image_1()
+    #######################################################################################
+
+    x_slider.on_changed(update_xoff)
+    y_slider.on_changed(update_yoff)
+
+    #######################################################################################
+    # Key press events
+
+    def onkey(event):
+        global dl, xoff, yoff, valuee
+        
+        if event.key == 'm':
+            dl += 1
+            return update_image_1()
+
+        elif event.key == 'n':
+            dl -= 1
+            return update_image_1()
+
+        if event.key == 'g':
+            valuee += 0.1
+            return update_image_2()
+
+        elif event.key == 'h':
+            valuee -= 0.1
+            return update_image_2()
+
+        if event.key == 'right':
+            xoff += 1
+            return update_image_1()
+
+        elif event.key == 'left':
+            xoff -= 1
+            return update_image_1()
+        if event.key == 'up':
+            yoff += 1
+            return update_image_1()
+
+        elif event.key == 'down':
+            yoff -= 1
+            return update_image_1()
+
+        elif event.key == 'enter':
+            return update_image_2()
+
+        return None
+
+            
+    cid = fig.canvas.mpl_connect('key_press_event', onkey)
+    print('\n---------------------------------------\n')
+    print('Instructions:\n')
+    print('> Use right and left arrows to make area smaller/bigger.')
+    print('> Use enter to compute riskmap.')
+    print('\n---------------------------------------\n')
+
+
+    #######################################################################################
+
+    plt.show()
+
+    return
+
+
 #################################################################################################
 #
 # Callback
@@ -175,7 +336,7 @@ class Callbacks:
 
         # SOGM params
         self.static_range = 0.8
-        self.dynamic_range = 1.5
+        self.dynamic_range = 1.2
         self.norm_p = 3
         self.norm_invp = 1 / self.norm_p
         self.maxima_layers = [38]
@@ -1008,164 +1169,14 @@ if __name__ == '__main__':
             time.sleep(0.5)
 
             if (my_callbacks.testtest):
-
+                
+                # Get data
                 collision_gts = my_callbacks.collision_gts_visu
                 diffused_risk = my_callbacks.diffused_risk_visu
-    
-                # Figure
-                global dl, xoff, yoff, fake_sogm, valuee
-                xoff = 0
-                yoff = 0
-                dl = 2
-                valuee = 0.99
-                fake_sogm = np.copy(collision_gts.cpu().numpy())
-                fig, (axA, axB) = plt.subplots(1, 2, figsize=(14, 7))
-                plt.subplots_adjust(left=0.1, bottom=0.15)
 
-                images = []
-                images.append(axA.imshow(fake_sogm[2]))
-                images.append(axB.imshow(diffused_risk[2]))
-                                
-                # The function to be called anytime a slider's value changes
-                def update_image_1():
-                    global dl, xoff, yoff, fake_sogm
+                # Debug function 1
+                debug_get_diffused_risk(collision_gts, diffused_risk)
 
-                    # Add obstacle in the image at the wanted postion
-                    fake_sogm2 = np.copy(fake_sogm[2])
-
-                    yoff1 = (fake_sogm2.shape[0] - 1) - yoff
-                    u0 = max(yoff1 - dl, 0)
-                    u1 = min(yoff1 + dl, fake_sogm2.shape[0])
-                    v0 = max(xoff - dl, 0)
-                    v1 = min(xoff + dl, fake_sogm2.shape[1])
-                    fake_sogm2[u0:u1, v0:v1, -1] = valuee
-                    
-                    fake_sogm2[45:50, 40:60, -1] = np.maximum(fake_sogm2[45:50, 40:60, -1], 0.39)
-                    
-                    # Update images
-                    images[0].set_array(fake_sogm2)
-                    
-                    plt.draw()
-
-                    return images
-                            
-                # The function to be called anytime a slider's value changes
-                def update_image_2():
-                    
-                    # Add obstacle in the image at the wanted postion
-                    fake_sogm_visu = np.copy(fake_sogm)
-
-                    yoff1 = (fake_sogm_visu.shape[1] - 1) - yoff
-                    u0 = max(yoff1 - dl, 0)
-                    u1 = min(yoff1 + dl, fake_sogm_visu.shape[1])
-                    v0 = max(xoff - dl, 0)
-                    v1 = min(xoff + dl, fake_sogm_visu.shape[2])
-                    fake_sogm_visu[2, u0:u1, v0:v1, -1] = valuee
-                    
-                    fake_sogm_visu[2, 45:50, 40:60, -1] = np.maximum(fake_sogm_visu[2, 45:50, 40:60, -1], 0.39)
-                    
-                    diffused_fake, obst_pos, static_mask = my_callbacks.get_diffused_risk(torch.from_numpy(fake_sogm_visu).to(my_callbacks.device))
-
-                    images[1].set_array(diffused_fake[2])
-
-                    plt.draw()
-
-                    return images
-
-                #######################################################################################
-                # Make a horizontal slider to control x.
-                axcolor = 'lightgoldenrodyellow'
-                axtime = plt.axes([0.05, 0.06, 0.4, 0.02], facecolor=axcolor)
-                x_slider = Slider(ax=axtime,
-                                  label='frame',
-                                  valmin=0,
-                                  valmax=collision_gts.shape[2],
-                                  valinit=0,
-                                  valstep=1)
-
-                # The function to be called anytime a slider's value changes
-                def update_xoff(val):
-                    global xoff
-                    xoff = int(val)
-                    return update_image_1()
-                #######################################################################################
-
-                #######################################################################################
-                # Make a vertical slider to control y.
-                axcolor = 'lightgoldenrodyellow'
-                axtime = plt.axes([0.02, 0.1, 0.01, 0.8], facecolor=axcolor)
-                y_slider = Slider(ax=axtime,
-                                  label='y_offset',
-                                  valmin=0,
-                                  valmax=collision_gts.shape[1],
-                                  valinit=0,
-                                  valstep=1,
-                                  orientation="vertical")
-
-                # The function to be called anytime a slider's value changes
-                def update_yoff(val):
-                    global yoff
-                    yoff = int(val)
-                    return update_image_1()
-                #######################################################################################
-
-                x_slider.on_changed(update_xoff)
-                y_slider.on_changed(update_yoff)
-
-                #######################################################################################
-                # Key press events
-
-                def onkey(event):
-                    global dl, xoff, yoff, valuee
-                    
-                    if event.key == 'm':
-                        dl += 1
-                        return update_image_1()
-
-                    elif event.key == 'n':
-                        dl -= 1
-                        return update_image_1()
-
-                    if event.key == 'g':
-                        valuee += 0.1
-                        return update_image_2()
-
-                    elif event.key == 'h':
-                        valuee -= 0.1
-                        return update_image_2()
-
-                    if event.key == 'right':
-                        xoff += 1
-                        return update_image_1()
-
-                    elif event.key == 'left':
-                        xoff -= 1
-                        return update_image_1()
-                    if event.key == 'up':
-                        yoff += 1
-                        return update_image_1()
-
-                    elif event.key == 'down':
-                        yoff -= 1
-                        return update_image_1()
-
-                    elif event.key == 'enter':
-                        return update_image_2()
-
-                    return None
-
-                        
-                cid = fig.canvas.mpl_connect('key_press_event', onkey)
-                print('\n---------------------------------------\n')
-                print('Instructions:\n')
-                print('> Use right and left arrows to make area smaller/bigger.')
-                print('> Use enter to compute riskmap.')
-                print('\n---------------------------------------\n')
-
-
-                #######################################################################################
-
-                plt.show()
 
                 a = 1/0
 

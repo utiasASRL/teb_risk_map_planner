@@ -64,10 +64,10 @@ void TebVisualization::initialize(ros::NodeHandle& nh, const TebConfig& cfg)
   global_plan_pub_ = nh.advertise<nav_msgs::Path>("global_plan", 1);
   local_plan_pub_ = nh.advertise<nav_msgs::Path>("local_plan",1);
   teb_poses_pub_ = nh.advertise<geometry_msgs::PoseArray>("teb_poses", 100);
-  vis_custom_pub_ = nh.advertise<visualization_msgs::MarkerArray>("teb_pose_layer", 100);
+  vis_custom_pub_ = nh.advertise<visualization_msgs::MarkerArray>("teb_pose_layer", 1000);
   teb_marker_pub_ = nh.advertise<visualization_msgs::Marker>("teb_markers", 1000);
   feedback_pub_ = nh.advertise<teb_local_planner::FeedbackMsg>("teb_feedback", 10);  
-  delay_pub_ = nh.advertise<std_msgs::Float32>("sogm_delay", 10);
+  delay_pub_ = nh.advertise<std_msgs::Float32>("sogm_delay", 100);
   
   initialized_ = true; 
 }
@@ -109,7 +109,7 @@ void TebVisualization::publishLocalPlanAndPoses(const TimedElasticBand& teb) con
     visualization_msgs::Marker markerD;
     markerD.header.frame_id = cfg_->map_frame;
     markerD.action = visualization_msgs::Marker::DELETEALL;
-    marker_array.markers.push_back(markerD);
+    // marker_array.markers.push_back(markerD);
 
     // Add new arrows
     if (teb.pose_layer.size() > 0)
@@ -128,13 +128,16 @@ void TebVisualization::publishLocalPlanAndPoses(const TimedElasticBand& teb) con
         // Set pose amd orientation
         marker.pose.position.x = teb.Pose(i).x();
         marker.pose.position.y = teb.Pose(i).y();
-        marker.pose.position.z = cfg_->hcp.visualize_with_time_as_z_axis_scale*teb.getSumOfTimeDiffsUpToIdx(i);
+        if (cfg_->hcp.visualize_with_time_as_z_axis_scale > 0.01)
+          marker.pose.position.z = cfg_->hcp.visualize_with_time_as_z_axis_scale*teb.getSumOfTimeDiffsUpToIdx(i);
+        else
+          marker.pose.position.z = 0.04;
         marker.pose.orientation = tf::createQuaternionMsgFromYaw(teb.Pose(i).theta());
 
         // Set length/width/height
-        marker.scale.x = 0.6* cfg_->trajectory.dt_ref;
-        marker.scale.y = 0.1 * cfg_->trajectory.dt_ref;
-        marker.scale.z = 0.05 * cfg_->trajectory.dt_ref;
+        marker.scale.x = 0.7* cfg_->trajectory.dt_ref;
+        marker.scale.y = 0.2 * cfg_->trajectory.dt_ref;
+        marker.scale.z = 0.1 * cfg_->trajectory.dt_ref;
 
         // Set color
         if (teb.pose_layer[i] < -0.5)
