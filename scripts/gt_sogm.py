@@ -112,25 +112,26 @@ def get_pointcloud_msg(new_points, stamp, frame_id, intensity=None):
 def debug_get_diffused_risk(collision_gts, diffused_risk):
 
     # Figure
-    global dl, xoff, yoff, fake_sogm, valuee
+    global dl, xoff, yoff, fake_sogm, valuee, T_i
     xoff = 0
     yoff = 0
     dl = 2
     valuee = 0.99
+    T_i = 18
     fake_sogm = np.copy(collision_gts.cpu().numpy())
     fig, (axA, axB) = plt.subplots(1, 2, figsize=(14, 7))
     plt.subplots_adjust(left=0.1, bottom=0.15)
 
     images = []
-    images.append(axA.imshow(fake_sogm[2]))
-    images.append(axB.imshow(diffused_risk[2]))
+    images.append(axA.imshow(fake_sogm[T_i]))
+    images.append(axB.imshow(np.copy(diffused_risk[T_i])))
                     
     # The function to be called anytime a slider's value changes
     def update_image_1():
-        global dl, xoff, yoff, fake_sogm
+        global dl, xoff, yoff, fake_sogm, T_i
 
         # Add obstacle in the image at the wanted postion
-        fake_sogm2 = np.copy(fake_sogm[2])
+        fake_sogm2 = np.copy(fake_sogm[T_i])
 
         yoff1 = (fake_sogm2.shape[0] - 1) - yoff
         u0 = max(yoff1 - dl, 0)
@@ -159,13 +160,13 @@ def debug_get_diffused_risk(collision_gts, diffused_risk):
         u1 = min(yoff1 + dl, fake_sogm_visu.shape[1])
         v0 = max(xoff - dl, 0)
         v1 = min(xoff + dl, fake_sogm_visu.shape[2])
-        fake_sogm_visu[2, u0:u1, v0:v1, -1] = valuee
+        fake_sogm_visu[18, u0:u1, v0:v1, -1] = valuee
         
-        fake_sogm_visu[2, 45:50, 40:60, -1] = np.maximum(fake_sogm_visu[2, 45:50, 40:60, -1], 0.39)
+        fake_sogm_visu[18, 45:50, 40:60, -1] = np.maximum(fake_sogm_visu[18, 45:50, 40:60, -1], 0.39)
         
         diffused_fake, obst_pos, static_mask = my_callbacks.get_diffused_risk(torch.from_numpy(fake_sogm_visu).to(my_callbacks.device))
 
-        images[1].set_array(diffused_fake[2])
+        images[1].set_array(diffused_fake[T_i])
 
         plt.draw()
 
@@ -215,7 +216,7 @@ def debug_get_diffused_risk(collision_gts, diffused_risk):
     # Key press events
 
     def onkey(event):
-        global dl, xoff, yoff, valuee
+        global dl, xoff, yoff, valuee, T_i
         
         if event.key == 'm':
             dl += 1
@@ -250,6 +251,17 @@ def debug_get_diffused_risk(collision_gts, diffused_risk):
 
         elif event.key == 'enter':
             return update_image_2()
+
+        elif event.key == '1':
+            T_i -= 1
+            update_image_1()
+            return update_image_2()
+
+        elif event.key == '2':
+            T_i += 1
+            update_image_1()
+            return update_image_2()
+
 
         return None
 
@@ -335,8 +347,9 @@ class Callbacks:
         self.time_resolution = self.dt
 
         # SOGM params
-        self.static_range = 0.8
-        self.dynamic_range = 1.2
+        self.static_range = 0.8     # In meters
+        self.dynamic_range = 1.2    # In meters
+        self.dynamic_t_range = 0.5  # In seconds
         self.norm_p = 3
         self.norm_invp = 1 / self.norm_p
         self.maxima_layers = [38]
@@ -380,10 +393,14 @@ class Callbacks:
         self.actor_shape = self.actor_shape[mask]
 
         # Convolution for Collision risk diffusion
-        self.static_conv = self.diffusing_convolution(self.static_range)
+        self.static_conv = self.diffusing_convolution(self.static_range, self.dl_2D, self.norm_p)
         self.static_conv.to(self.device)
-        self.dynamic_conv = self.diffusing_convolution(self.dynamic_range)
+        self.dynamic_conv = self.diffusing_convolution(self.dynamic_range, self.dl_2D, self.norm_p)
         self.dynamic_conv.to(self.device)
+
+        self.time_conv = self.diffusing_convolution(self.dynamic_t_range, self.dt, self.norm_p, dim1D=True)
+        self.time_conv.to(self.device)
+
 
         ############
         # Init ROS #
@@ -748,35 +765,42 @@ class Callbacks:
         high_risk_threshold = 0.7
         high_risk_mask = dynamic_risk > high_risk_threshold
         high_risk = torch.zeros_like(dynamic_risk)
-        high_risk[high_risk_mask] = dynamic_risk[high_risk_mask]
+        # high_risk[high_risk_mask] = dynamic_risk[high_risk_mask]
+        high_risk[high_risk_mask] = 1
+
+        #TODO: fix problem at border due to normalization!!! 
 
         # On the whole dynamic_risk, convolution
         # Higher value for larger area of risk even if low risk
         dynamic_risk = torch.unsqueeze(dynamic_risk, 1)
-        diffused_1 = np.squeeze(self.dynamic_conv(dynamic_risk).cpu().detach().numpy())
+        diffused_1 = torch.squeeze(self.dynamic_conv(dynamic_risk))
 
         # Inverse power for p-norm
-        diffused_1 = np.power(np.maximum(0, diffused_1), self.norm_invp)
+        diffused_1 = torch.pow(torch.clamp(diffused_1, min=0), self.norm_invp)
 
         # Rescale this low_risk at smaller value
         low_risk_value = 0.4
-        diffused_1 = low_risk_value * diffused_1 / (np.max(diffused_1) + 1e-6)
+        diffused_1 = low_risk_value * diffused_1 / (torch.max(diffused_1) + 1e-6)
 
         # On the high risk, we normalize to have similar value of highest risk (around 1.0)
-        high_risk = torch.unsqueeze(high_risk, 1)
-        high_risk_normalized = high_risk / (self.dynamic_conv(high_risk) + 1e-6)
-        diffused_2 = np.squeeze(self.dynamic_conv(high_risk_normalized).cpu().detach().numpy())
+        high_risk_norm = torch.squeeze(self.dynamic_conv(torch.unsqueeze(high_risk, 1)))
+        high_risk_norm = torch.unsqueeze(torch.unsqueeze(high_risk_norm, 0), 0)
+        high_risk_norm = torch.squeeze(self.time_conv(high_risk_norm))
+        high_risk_normalized = high_risk / (high_risk_norm + 1e-6)
+
+        # We only diffuse time for high risk (as this is useful for the beginning of predictions)
+        diffused_2 = torch.squeeze(self.dynamic_conv(torch.unsqueeze(high_risk_normalized, 1)))
+        diffused_2 = torch.unsqueeze(torch.unsqueeze(diffused_2, 0), 0)
+        diffused_2 = torch.squeeze(self.time_conv(diffused_2))
 
         # Inverse power for p-norm
-        diffused_2 = np.power(np.maximum(0, diffused_2), self.norm_invp)
+        diffused_2 = torch.pow(torch.clamp(diffused_2, min=0), self.norm_invp)
 
         # Rescale and combine risk
         # ************************
         
-        print(np.max(diffused_0), np.max(diffused_1), np.max(diffused_2))
-
         # Combine dynamic risks
-        diffused_1 = np.maximum(diffused_1, diffused_2)
+        diffused_1 = torch.maximum(diffused_1, diffused_2).detach().cpu().numpy()
 
         # Rescale risk values (max should be stable around 1.0 for both)
         diffused_0 *= 1.0 / (np.max(diffused_0) + 1e-6)
@@ -851,18 +875,34 @@ class Callbacks:
 
         return mask_pos
 
-    def diffusing_convolution(self, obstacle_range):
+    def diffusing_convolution(self, obstacle_range, dl, norm_p, dim1D=False):
         
-        k_range = int(np.ceil(obstacle_range / self.dl_2D))
+        k_range = int(np.ceil(obstacle_range / dl))
         k = 2 * k_range + 1
-        dist_kernel = np.zeros((k, k))
-        for i, vv in enumerate(dist_kernel):
-            for j, v in enumerate(vv):
-                dist_kernel[i, j] = np.sqrt((i - k_range) ** 2 + (j - k_range) ** 2)
-        dist_kernel = np.clip(1.0 - dist_kernel * self.dl_2D / obstacle_range, 0, 1) ** self.norm_p
-        fixed_conv = torch.nn.Conv2d(1, 1, k, stride=1, padding=k_range, bias=False)
+
+        if dim1D:
+            dist_kernel = np.zeros((k, 1, 1))
+            for i in range(k):
+                dist_kernel[i, 0, 0] = i - k_range
+
+        else:
+            dist_kernel = np.zeros((k, k))
+            for i, vv in enumerate(dist_kernel):
+                for j, v in enumerate(vv):
+                    dist_kernel[i, j] = np.sqrt((i - k_range) ** 2 + (j - k_range) ** 2)
+
+
+        dist_kernel = np.clip(1.0 - dist_kernel * (dl / obstacle_range), 0, 1) ** norm_p
+
+        if dim1D:
+            fixed_conv = torch.nn.Conv3d(1, 1, (k, 1, 1), stride=1, padding=(k_range, 0, 0), bias=False)
+
+        else:
+            fixed_conv = torch.nn.Conv2d(1, 1, k, stride=1, padding=k_range, bias=False)
+
         fixed_conv.weight.requires_grad = False
         fixed_conv.weight *= 0
+
         fixed_conv.weight += torch.from_numpy(dist_kernel)
 
         return fixed_conv
@@ -1159,7 +1199,7 @@ if __name__ == '__main__':
                                            queue_size=10)
 
 
-    debug = False
+    debug = True
     if debug:
         while not rospy.is_shutdown():
 
