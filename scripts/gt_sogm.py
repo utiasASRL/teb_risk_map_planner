@@ -140,7 +140,7 @@ def debug_get_diffused_risk(collision_gts, diffused_risk):
         v1 = min(xoff + dl, fake_sogm2.shape[1])
         fake_sogm2[u0:u1, v0:v1, -1] = valuee
         
-        fake_sogm2[45:50, 40:60, -1] = np.maximum(fake_sogm2[45:50, 40:60, -1], 0.39)
+        fake_sogm2[47:50, 0:60, -1] = np.maximum(fake_sogm2[47:50, 0:60, -1], 0.99)
         
         # Update images
         images[0].set_array(fake_sogm2)
@@ -162,7 +162,7 @@ def debug_get_diffused_risk(collision_gts, diffused_risk):
         v1 = min(xoff + dl, fake_sogm_visu.shape[2])
         fake_sogm_visu[18, u0:u1, v0:v1, -1] = valuee
         
-        fake_sogm_visu[18, 45:50, 40:60, -1] = np.maximum(fake_sogm_visu[18, 45:50, 40:60, -1], 0.39)
+        fake_sogm_visu[18, 47:50, 0:60, -1] = np.maximum(fake_sogm_visu[18, 47:50, 0:60, -1], 0.99)
         
         diffused_fake, obst_pos, static_mask = my_callbacks.get_diffused_risk(torch.from_numpy(fake_sogm_visu).to(my_callbacks.device))
 
@@ -768,8 +768,6 @@ class Callbacks:
         # high_risk[high_risk_mask] = dynamic_risk[high_risk_mask]
         high_risk[high_risk_mask] = 1
 
-        #TODO: fix problem at border due to normalization!!! 
-
         # On the whole dynamic_risk, convolution
         # Higher value for larger area of risk even if low risk
         dynamic_risk = torch.unsqueeze(dynamic_risk, 1)
@@ -802,9 +800,10 @@ class Callbacks:
         # Combine dynamic risks
         diffused_1 = torch.maximum(diffused_1, diffused_2).detach().cpu().numpy()
 
-        # Rescale risk values (max should be stable around 1.0 for both)
-        diffused_0 *= 1.0 / (np.max(diffused_0) + 1e-6)
-        diffused_1 *= 1.0 / (np.max(diffused_1) + 1e-6)
+        # Rescale risk with a fixed value, because thx to normalization, the mx should be close to one, 
+        # There are peak at border so we divide by 1.1 to take it into consideration
+        diffused_1 *= 1.0 / 1.1
+        diffused_0 *= 1.0 / 1.1
 
         # merge the static risk as the first layer of the vox grid (with the delay this layer is useless for dynamic)
         diffused_1[0, :, :] = diffused_0
@@ -883,7 +882,7 @@ class Callbacks:
         if dim1D:
             dist_kernel = np.zeros((k, 1, 1))
             for i in range(k):
-                dist_kernel[i, 0, 0] = i - k_range
+                dist_kernel[i, 0, 0] = abs(i - k_range)
 
         else:
             dist_kernel = np.zeros((k, k))
@@ -895,7 +894,11 @@ class Callbacks:
         dist_kernel = np.clip(1.0 - dist_kernel * (dl / obstacle_range), 0, 1) ** norm_p
 
         if dim1D:
-            fixed_conv = torch.nn.Conv3d(1, 1, (k, 1, 1), stride=1, padding=(k_range, 0, 0), bias=False)
+            fixed_conv = torch.nn.Conv3d(1, 1, (k, 1, 1),
+                                         stride=1,
+                                         padding=(k_range, 0, 0),
+                                         padding_mode='replicate',
+                                         bias=False)
 
         else:
             fixed_conv = torch.nn.Conv2d(1, 1, k, stride=1, padding=k_range, bias=False)
@@ -1017,7 +1020,7 @@ class Callbacks:
 
         elif dyn_v == "v2":
             # for iso_i, iso in enumerate([230, 150, 70]):
-            for iso_i, iso in enumerate([230]):
+            for iso_i, iso in enumerate([210]):
 
                 dynamic_mask = collision_preds[1:, :, :] > iso
                 dynamic_data = dynamic_mask.astype(np.float32) * np.expand_dims(np.arange(dynamic_mask.shape[0]) + 1, (1, 2))
