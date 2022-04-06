@@ -337,7 +337,8 @@ class Callbacks:
         self.testtest = False
         
         # Spatial dimensions
-        self.in_radius = 8
+        self.in_radius = 38.0
+        self.radius_2D = 8.0
         self.dl_2D = 0.12
         
         # Prediction until T=4.0s
@@ -519,7 +520,7 @@ class Callbacks:
         # dyn_pts = aligned_pts[labels == 2]
 
         # Project on a 2D grid
-        grid_L = 2 * self.in_radius / np.sqrt(2)
+        grid_L = 2 * self.radius_2D / np.sqrt(2)
         static_grid = project_points_to_2D(static_pts, grid_L, self.dl_2D)
 
 
@@ -667,7 +668,7 @@ class Callbacks:
         #####################
 
         # Get obstacles in world coordinates
-        origin0 = p0 - self.in_radius / np.sqrt(2)
+        origin0 = p0 - self.radius_2D / np.sqrt(2)
 
         world_obst = []
         for obst_i, pos in enumerate(obst_pos):
@@ -918,7 +919,7 @@ class Callbacks:
     def publish_collisions(self, collision_preds, stamp0, p0):
 
         # Get origin and orientation
-        origin0 = p0 - self.in_radius / np.sqrt(2)
+        origin0 = p0 - self.radius_2D / np.sqrt(2)
 
         # Define header
         msg = VoxGrid()
@@ -961,7 +962,7 @@ class Callbacks:
         '''
 
         # Get origin and orientation
-        origin0 = p0 - self.in_radius / np.sqrt(2)
+        origin0 = p0 - self.radius_2D / np.sqrt(2)
 
         # Define header
         msg = OccupancyGrid()

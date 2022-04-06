@@ -176,7 +176,7 @@ def get_static_visu(static, static_mask, t0, p0, q0, visu_T=15):
     '''
 
     # Get origin and orientation
-    origin0 = p0 - self.config.in_radius / np.sqrt(2)
+    origin0 = p0 - self.config.radius_2D / np.sqrt(2)
 
     # Define header
     msg = OccupancyGrid()
