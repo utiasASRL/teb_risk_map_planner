@@ -187,7 +187,6 @@ def get_static_visu(static, static_mask, t0, p0, q0, visu_T=15):
     msg_static.header.frame_id = 'map'
 
 
-
     # Define message meta data
     msg.info.map_load_time = rclTime(seconds=t0.sec, nanoseconds=t0.nanosec).to_msg()
     msg.info.resolution = self.config.dl_2D
