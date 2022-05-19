@@ -1171,6 +1171,19 @@ if __name__ == '__main__':
     rospy.init_node("gt_sogm_simu")
     load_path = rospy.get_param('load_path')
     load_world = rospy.get_param('load_world')
+    use_gt_sogm = rospy.get_param('use_gt_sogm')
+    interp_linear = rospy.get_param('interp_linear')
+    ignore_dynamic = rospy.get_param('ignore_dynamic')
+
+    print(type(use_gt_sogm), use_gt_sogm)
+    print(type(interp_linear), interp_linear)
+    print(type(ignore_dynamic), ignore_dynamic)
+
+    sogm_mode = 'ignore_dynamic'
+    if interp_linear:
+        sogm_mode = 'interp_linear'
+    if use_gt_sogm:
+        sogm_mode = 'use_gt_sogm'
 
     # Load actor poses
     t1 = time.time()
@@ -1202,7 +1215,6 @@ if __name__ == '__main__':
     tfListener = tf2_ros.TransformListener(tfBuffer,
                                            queue_size=10)
 
-
     debug = False
     if debug:
         while not rospy.is_shutdown():
@@ -1220,7 +1232,6 @@ if __name__ == '__main__':
 
                 # Debug function 1
                 debug_get_diffused_risk(collision_gts, diffused_risk)
-
 
                 a = 1/0
 
