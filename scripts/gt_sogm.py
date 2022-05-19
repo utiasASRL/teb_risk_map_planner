@@ -1203,7 +1203,7 @@ if __name__ == '__main__':
                                            queue_size=10)
 
 
-    debug = True
+    debug = False
     if debug:
         while not rospy.is_shutdown():
 
