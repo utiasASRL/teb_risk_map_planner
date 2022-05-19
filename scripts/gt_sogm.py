@@ -295,7 +295,7 @@ class Callbacks:
     # *************
     #
 
-    def __init__(self, tfBuffer0, tfListener0, actor_times, actor_xy):
+    def __init__(self, tfBuffer0, tfListener0, actor_times, actor_xy, sogm_mode):
         
         ####################
         # Init environment #
@@ -335,6 +335,7 @@ class Callbacks:
         ###################
 
         self.testtest = False
+        self.sogm_mode = sogm_mode
         
         # Spatial dimensions
         self.in_radius = 38.0
@@ -556,6 +557,12 @@ class Callbacks:
         alpha = (fut_times - prev_t) / (next_t - prev_t)
         alpha = np.expand_dims(alpha, (1, 2))
         interp_xy = (1-alpha) * prev_xy + alpha * next_xy
+
+        if self.sogm_mode == 'extrapo_linear':
+
+            bla = 0
+
+
 
         # Recenter on p0
         interp_xy = interp_xy - p0[:2]
@@ -1172,18 +1179,14 @@ if __name__ == '__main__':
     load_path = rospy.get_param('load_path')
     load_world = rospy.get_param('load_world')
     use_gt_sogm = rospy.get_param('use_gt_sogm')
-    interp_linear = rospy.get_param('interp_linear')
-    ignore_dynamic = rospy.get_param('ignore_dynamic')
+    extrapo_linear = rospy.get_param('extrapo_linear')
 
     print(type(use_gt_sogm), use_gt_sogm)
-    print(type(interp_linear), interp_linear)
-    print(type(ignore_dynamic), ignore_dynamic)
+    print(type(extrapo_linear), extrapo_linear)
 
-    sogm_mode = 'ignore_dynamic'
-    if interp_linear:
-        sogm_mode = 'interp_linear'
-    if use_gt_sogm:
-        sogm_mode = 'use_gt_sogm'
+    sogm_mode = 'use_gt_sogm'
+    if extrapo_linear:
+        sogm_mode = 'extrapo_linear'
 
     # Load actor poses
     t1 = time.time()
@@ -1207,7 +1210,7 @@ if __name__ == '__main__':
     tfListener = tf2_ros.TransformListener(tfBuffer,
                                            queue_size=10)
 
-    my_callbacks = Callbacks(tfBuffer, tfListener, actor_times, actor_xy)
+    my_callbacks = Callbacks(tfBuffer, tfListener, actor_times, actor_xy, sogm_mode)
 
     rospy.Subscriber("/velodyne_points", PointCloud2, my_callbacks.velo_callback)
     
