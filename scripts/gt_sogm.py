@@ -560,9 +560,11 @@ class Callbacks:
 
         if self.sogm_mode == 'extrapo_linear':
 
-            bla = 0
+            # Take the two first actor positions to get speed (1, n, 2)
+            interp_speed = interp_xy[1:2, :, :] - interp_xy[:1, :, :]
 
-
+            #  and extrapolate (1, n, 2) * (T, 1, 1)
+            interp_xy = interp_xy[:1, :, :] + interp_speed * np.expand_dims(np.arange(interp_xy.shape[0], dtype=interp_xy.dtype), (1, 2))
 
         # Recenter on p0
         interp_xy = interp_xy - p0[:2]
