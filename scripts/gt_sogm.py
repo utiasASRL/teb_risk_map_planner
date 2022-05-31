@@ -351,14 +351,14 @@ class Callbacks:
         # SOGM params
         self.static_range = 0.8     # In meters
         self.dynamic_range = 1.2    # In meters
-        self.dynamic_t_range = 0.5  # In seconds
+        self.dynamic_t_range = 1.0  # In seconds
         self.norm_p = 3
         self.norm_invp = 1 / self.norm_p
-        self.maxima_layers = [38]
+        self.maxima_layers = [15]
         self.visu_T = 29
 
         # Delay of prediction
-        self.delay = 0.3
+        self.delay = 0.25
 
         # Time factor for visu
         self.time_factor = 0.3
