@@ -40,7 +40,6 @@ TebLocalPlannerROS:
 
 
  # GoalTolerance
-    
  xy_goal_tolerance: 1.0     # 0.2 for precise location
  yaw_goal_tolerance: 100.0  # 0.1 for precise location
  free_goal_vel: True

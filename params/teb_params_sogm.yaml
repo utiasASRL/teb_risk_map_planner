@@ -87,7 +87,7 @@ TebLocalPlannerROS:
 #  weight_adapt_factor: 2
 
  weight_predicted_costmap: 1.3   # Default: 0.6 direct multiplier of the error function for predicted costmaps
- weight_static_costmap: 1.1   # Default: 0.6 direct multiplier of the error function for predicted costmaps
+ weight_static_costmap: 0.8   # Default: 0.6 direct multiplier of the error function for predicted costmaps
 
  # Homotopy Class Planner
  enable_homotopy_class_planning: True
